@@ -1,0 +1,3279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VitIMG · Photo Editor</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box;
+      font-family:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+
+  :root {
+    --bg-0:#0d0d0f; --bg-1:#141417; --bg-2:#1a1a1f; --bg-3:#212127; --bg-4:#2a2a31;
+    --border:#27272f; --border-soft:#1f1f25;
+    --text-0:#f2f2f4; --text-1:#a8a8b0; --text-2:#6d6d78;
+    --accent:#ff8a3c; --accent-2:#f27418; --accent-soft:#ffb26b;
+    --accent-dim:rgba(255,138,60,.13);
+    --red:#ff5c72; --green:#4ade80;
+    --r-s:4px; --r-m:6px; --r-l:8px;
+    --checker-1:#26262d;
+  }
+
+  html, body { height:100%; background:var(--bg-0); color:var(--text-0);
+    overflow:hidden; font-size:13px; -webkit-font-smoothing:antialiased; }
+
+  :focus { outline:none; }
+  :focus-visible { outline:2px solid var(--accent-soft); outline-offset:1px; border-radius:var(--r-s); }
+
+  kbd { background:var(--bg-3); border:1px solid var(--border); border-bottom-width:2px;
+    border-radius:4px; padding:1px 5px; font-family:ui-monospace,Menlo,monospace;
+    font-size:10px; color:var(--text-0); }
+
+  .num { font-variant-numeric:tabular-nums; }
+
+  .app { display:grid; grid-template-rows:46px 1fr; height:100vh; width:100vw; }
+
+  /* ============ TOP BAR ============ */
+  .topbar { background:var(--bg-1); border-bottom:1px solid var(--border-soft);
+    display:flex; align-items:center; padding:0 12px; gap:10px; user-select:none; z-index:20; }
+  .tb-left { display:flex; align-items:center; gap:12px; flex:1; min-width:0; }
+  .doc { font-size:12px; color:var(--text-2); white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; max-width:280px; }
+  .tb-right { display:flex; align-items:center; gap:4px; }
+
+  .tb-btn { height:28px; min-width:28px; padding:0 8px; display:inline-flex; align-items:center;
+    justify-content:center; gap:6px; background:transparent; border:1px solid transparent;
+    border-radius:var(--r-m); color:var(--text-1); cursor:pointer; font-family:inherit;
+    font-size:11px; transition:background .12s, color .12s; white-space:nowrap; }
+  .tb-btn:hover:not(:disabled) { background:var(--bg-3); color:var(--text-0); }
+  .tb-btn:active:not(:disabled) { background:var(--bg-4); }
+  .tb-btn:disabled { opacity:.35; cursor:not-allowed; }
+  .tb-btn.holding { background:var(--accent-dim); color:var(--accent-soft);
+    box-shadow:inset 0 0 0 1px rgba(255,138,60,.4); }
+  .tb-btn.zoom-label { font-family:ui-monospace,Menlo,monospace; min-width:52px;
+    font-size:10.5px; font-variant-numeric:tabular-nums; }
+  .tb-sep { width:1px; height:18px; background:var(--border-soft); margin:0 4px; }
+
+  .upload-btn { background:#ffffff; color:#141414; border:none; padding:7px 14px;
+    border-radius:var(--r-m); font-size:11.5px; font-weight:600; cursor:pointer;
+    font-family:inherit; display:inline-flex; align-items:center; gap:6px; transition:.15s; }
+  .upload-btn:hover { background:#ececef; }
+  .export-btn { background:var(--accent); color:#1c0e02; border:none; padding:7px 14px;
+    border-radius:var(--r-m); font-size:11.5px; font-weight:700; cursor:pointer;
+    font-family:inherit; display:inline-flex; align-items:center; gap:6px; transition:.15s; }
+  .export-btn:hover { background:#ff964d; }
+
+  /* ============ LAYOUT ============ */
+  .main { display:grid; grid-template-columns:1fr 60px 320px; min-height:0; }
+
+  /* ============ STAGE ============ */
+  .stage { position:relative; overflow:hidden; background:var(--bg-0); }
+  .stage-scroll { position:absolute; inset:0; overflow:auto; display:flex; }
+  .stage-scroll::-webkit-scrollbar { width:8px; height:8px; }
+  .stage-scroll::-webkit-scrollbar-thumb { background:#2c2c34; border-radius:4px; }
+  .stage-scroll::-webkit-scrollbar-thumb:hover { background:#363640; }
+  .stage-inner { position:relative; display:none; margin:auto; padding:32px;
+    background-color:#121216;
+    background-image:linear-gradient(45deg,var(--checker-1) 25%,transparent 25%),
+      linear-gradient(-45deg,var(--checker-1) 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,var(--checker-1) 75%),
+      linear-gradient(-45deg,transparent 75%,var(--checker-1) 75%);
+    background-size:16px 16px; background-position:0 0,0 8px,8px -8px,-8px 0; }
+  #glCanvas { display:block; box-shadow:0 4px 24px rgba(0,0,0,.45);
+    outline:1px solid rgba(255,255,255,.07); user-select:none; touch-action:none; cursor:default; }
+  #glCanvas.grabbing { cursor:grabbing; }
+  #glCanvas.pan { cursor:grab !important; }
+  #glCanvas.picking { cursor:crosshair !important; }
+
+  .compare-tag { position:absolute; top:14px; background:rgba(10,10,12,.8);
+    border:1px solid var(--border); color:var(--text-1); border-radius:var(--r-s);
+    padding:4px 10px; font-size:9.5px; font-weight:600; letter-spacing:.12em;
+    display:none; z-index:15; backdrop-filter:blur(6px); }
+  #beforeTag { left:14px; }
+  #afterTag { right:14px; }
+  .stage.comparing #beforeTag { display:block; }
+  .stage.split-on #afterTag, .stage.split-on #beforeTag { display:block; }
+
+  .split-line { position:absolute; inset:32px; display:none; z-index:13; pointer-events:none; }
+  .split-line.on { display:block; }
+  .split-line::before { content:''; position:absolute; top:0; bottom:0; width:2px;
+    left:var(--sx, 50%); background:#fff; box-shadow:0 0 6px rgba(0,0,0,.6); }
+  .split-knob { position:absolute; top:50%; left:var(--sx, 50%); transform:translate(-50%,-50%);
+    width:24px; height:24px; border-radius:50%; background:var(--accent); border:2px solid #fff;
+    pointer-events:auto; cursor:ew-resize; box-shadow:0 2px 10px rgba(0,0,0,.5);
+    display:flex; align-items:center; justify-content:center; color:#1c0e02; }
+
+  /* Crop overlay */
+  .crop-overlay { position:absolute; inset:32px; display:none; z-index:12;
+    cursor:crosshair; touch-action:none; }
+  .crop-overlay.on { display:block; }
+  .crop-rect { position:absolute; border:1.5px solid var(--accent); cursor:move;
+    box-shadow:0 0 0 9999px rgba(8,8,10,.62); }
+  .crop-grid { position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:
+      linear-gradient(to right, transparent calc(33.33% - 1px), rgba(255,255,255,.55) calc(33.33% - 1px), rgba(255,255,255,.55) calc(33.33% + 1px), transparent calc(33.33% + 1px)),
+      linear-gradient(to right, transparent calc(66.66% - 1px), rgba(255,255,255,.55) calc(66.66% - 1px), rgba(255,255,255,.55) calc(66.66% + 1px), transparent calc(66.66% + 1px)),
+      linear-gradient(to bottom, transparent calc(33.33% - 1px), rgba(255,255,255,.55) calc(33.33% - 1px), rgba(255,255,255,.55) calc(33.33% + 1px), transparent calc(33.33% + 1px)),
+      linear-gradient(to bottom, transparent calc(66.66% - 1px), rgba(255,255,255,.55) calc(66.66% - 1px), rgba(255,255,255,.55) calc(66.66% + 1px), transparent calc(66.66% + 1px)); }
+  .crop-handle { position:absolute; width:9px; height:9px; background:#fff;
+    border:1px solid rgba(0,0,0,.55); border-radius:2px; z-index:2; }
+  .crop-handle[data-h="nw"]{left:-5px;top:-5px;cursor:nwse-resize;}
+  .crop-handle[data-h="n"]{left:50%;top:-5px;margin-left:-5px;cursor:ns-resize;}
+  .crop-handle[data-h="ne"]{right:-5px;top:-5px;cursor:nesw-resize;}
+  .crop-handle[data-h="e"]{right:-5px;top:50%;margin-top:-5px;cursor:ew-resize;}
+  .crop-handle[data-h="se"]{right:-5px;bottom:-5px;cursor:nwse-resize;}
+  .crop-handle[data-h="s"]{left:50%;bottom:-5px;margin-left:-5px;cursor:ns-resize;}
+  .crop-handle[data-h="sw"]{left:-5px;bottom:-5px;cursor:nesw-resize;}
+  .crop-handle[data-h="w"]{left:-5px;top:50%;margin-top:-5px;cursor:ew-resize;}
+
+  .drop-overlay { position:absolute; inset:10px; border:2px dashed var(--accent); border-radius:10px;
+    background:rgba(255,138,60,.07); display:none; align-items:center; justify-content:center;
+    z-index:30; pointer-events:none; font-size:13px; font-weight:600; color:var(--accent); }
+  .drop-overlay.show { display:flex; }
+
+  .empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:12px; color:var(--text-2); text-align:center; z-index:10; }
+  .empty-icon { width:56px; height:56px; border-radius:12px; border:1px dashed var(--border);
+    display:flex; align-items:center; justify-content:center; color:var(--text-1); margin-bottom:4px; }
+  .empty-title { color:var(--text-0); font-size:14px; font-weight:600; }
+  .empty-sub { font-size:11.5px; max-width:320px; line-height:1.6; }
+  .empty-actions { display:flex; gap:8px; margin-top:8px; }
+  .empty-kbd { font-size:10.5px; margin-top:6px; }
+
+  /* ============ RAIL ============ */
+  .rail { background:var(--bg-1); border-left:1px solid var(--border-soft); display:flex;
+    flex-direction:column; padding:8px 0; gap:2px; user-select:none; z-index:20; overflow-y:auto; }
+  .rail-btn { display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 2px;
+    background:transparent; border:none; border-left:2px solid transparent; color:var(--text-2);
+    cursor:pointer; font-family:inherit; transition:.12s; flex-shrink:0; }
+  .rail-btn span { font-size:8px; font-weight:600; letter-spacing:.05em; text-transform:uppercase;
+    max-width:56px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rail-btn:hover { color:var(--text-1); background:var(--bg-2); }
+  .rail-btn.active { color:var(--text-0); background:var(--bg-2); border-left-color:var(--accent); }
+  .rail-btn.active svg { color:var(--accent-soft); }
+
+  /* ============ PANEL ============ */
+  .panel { background:var(--bg-1); display:flex; flex-direction:column; min-height:0; z-index:20; }
+  .panel-head { padding:14px 16px 10px; border-bottom:1px solid var(--border-soft); }
+  .panel-title { font-size:13px; font-weight:700; letter-spacing:.01em; }
+  .panel-sub { font-size:10.5px; color:var(--text-2); margin-top:2px; }
+  .panel-content { flex:1; min-height:0; position:relative; display:flex; }
+  .panel-body { flex:1; min-width:0; overflow-y:auto; padding:16px; }
+  .panel-body::-webkit-scrollbar { width:6px; }
+  .panel-body::-webkit-scrollbar-thumb { background:#2c2c34; border-radius:3px; }
+  .panel-body::-webkit-scrollbar-thumb:hover { background:#363640; }
+  .panel-body.locked { filter:grayscale(1); opacity:.4; pointer-events:none; user-select:none; }
+
+  .panel-footer { padding:10px 16px; border-top:1px solid var(--border-soft); }
+
+  .panel-lock { position:absolute; inset:0; z-index:6; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:10px; text-align:center; padding:24px;
+    background:rgba(13,13,15,.55); backdrop-filter:blur(1px); }
+  .panel-lock.show { display:flex; }
+  .panel-lock .lock-badge { width:52px; height:52px; border-radius:12px;
+    border:1px solid var(--border); background:var(--bg-2); display:flex; align-items:center;
+    justify-content:center; color:var(--text-1); }
+  .panel-lock .lock-title { font-size:12.5px; font-weight:600; color:var(--text-0); }
+  .panel-lock .lock-sub { font-size:10.5px; color:var(--text-2); }
+
+  .tab-content { display:none; animation:fadeIn .15s ease; }
+  .tab-content.active { display:block; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:none;} }
+
+  .section { margin-bottom:20px; }
+  .section-label { font-size:9.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--text-2); margin-bottom:10px; }
+  .divider { height:1px; background:var(--border-soft); margin:18px 0; }
+  .hint { font-size:10.5px; color:var(--text-2); line-height:1.55; padding:8px 10px;
+    background:rgba(255,138,60,.05); border-left:2px solid rgba(255,138,60,.45);
+    border-radius:0 var(--r-s) var(--r-s) 0; margin-top:8px; }
+  .hint b { color:var(--text-1); font-weight:600; }
+
+  .row { display:grid; grid-template-columns:70px 1fr 42px; align-items:center; gap:10px; margin-bottom:11px; }
+  .row label { font-size:11px; color:var(--text-1); }
+  .row .val { font-size:10.5px; color:var(--text-2); font-family:ui-monospace,Menlo,monospace;
+    text-align:right; font-variant-numeric:tabular-nums; }
+
+  input[type="range"] { -webkit-appearance:none; appearance:none; width:100%; height:3px;
+    background:var(--bg-3); border-radius:3px; outline:none; cursor:pointer; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px;
+    background:#fff; border-radius:50%; cursor:pointer; box-shadow:0 0 0 1px rgba(0,0,0,.35);
+    transition:transform .1s; }
+  input[type="range"]::-webkit-slider-thumb:hover { transform:scale(1.15); }
+  input[type="range"]::-moz-range-thumb { width:12px; height:12px; background:#fff; border:none;
+    border-radius:50%; cursor:pointer; }
+  input[type="range"]:disabled { opacity:.35; }
+
+  .color-cell { display:flex; align-items:center; gap:8px; font-size:10.5px; color:var(--text-2);
+    font-family:ui-monospace,Menlo,monospace; }
+  .iso-swatch { width:26px; height:18px; border-radius:var(--r-s); border:1px solid var(--border);
+    display:inline-block; background:#ff2020; flex-shrink:0; }
+
+  .select { width:100%; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);
+    border-radius:var(--r-m); padding:9px 12px; font-size:12px; font-family:inherit; cursor:pointer;
+    outline:none; appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,var(--text-2) 50%),
+      linear-gradient(135deg,var(--text-2) 50%,transparent 50%);
+    background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+    background-size:5px 5px; background-repeat:no-repeat; transition:border-color .15s; }
+  .select:hover { border-color:#33333d; }
+  .select:disabled { opacity:.4; cursor:not-allowed; }
+
+  .btn { width:100%; background:var(--bg-3); color:var(--text-0); border:1px solid var(--border);
+    border-radius:var(--r-m); padding:10px 12px; font-size:11.5px; font-family:inherit; font-weight:500;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:.15s; letter-spacing:.01em; text-decoration:none; }
+  .btn:hover:not(:disabled) { background:var(--bg-4); border-color:#33333d; }
+  .btn:active:not(:disabled) { background:#31313a; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .btn.accent { background:var(--accent); border-color:var(--accent); color:#1c0e02; font-weight:700; }
+  .btn.accent:hover:not(:disabled) { background:#ff964d; border-color:#ff964d; }
+  .btn.danger-btn { color:var(--red); background:transparent; border-color:rgba(255,92,114,.25); }
+  .btn.danger-btn:hover:not(:disabled) { background:rgba(255,92,114,.08); border-color:rgba(255,92,114,.5); }
+  .btn-row { display:flex; gap:8px; }
+  .toggle.pressed { background:var(--accent-dim); color:var(--accent-soft);
+    border-color:rgba(255,138,60,.35); font-weight:600; }
+  .field-disabled { opacity:.45; pointer-events:none; }
+
+  .seg { display:flex; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--r-m);
+    overflow:hidden; }
+  .seg-btn { flex:1; background:transparent; border:none; color:var(--text-2); padding:9px 0;
+    font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; transition:.12s; }
+  .seg-btn:hover { color:var(--text-0); }
+  .seg-btn.active { background:var(--bg-4); color:var(--text-0); box-shadow:inset 0 -2px 0 var(--accent); }
+  .export-info { font-size:11px; color:var(--text-2); font-family:ui-monospace,Menlo,monospace;
+    font-variant-numeric:tabular-nums; padding:9px 11px; background:var(--bg-2);
+    border:1px solid var(--border); border-radius:var(--r-m); }
+
+  /* Presets */
+  .preset-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+  .preset { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--r-l);
+    padding:5px; cursor:pointer; display:flex; flex-direction:column; gap:4px; transition:.12s;
+    font-family:inherit; }
+  .preset:hover { border-color:#33333d; background:var(--bg-3); }
+  .preset.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .preset canvas { width:100%; border-radius:var(--r-s); display:block; background:#111; }
+  .preset span { font-size:9.5px; color:var(--text-1); text-align:center; letter-spacing:.02em; }
+
+  /* LUT chip */
+  .lut-preview { display:flex; align-items:center; gap:8px; padding:8px; background:var(--bg-2);
+    border:1px solid var(--border); border-radius:var(--r-m); margin-bottom:8px; font-size:11px; }
+  .lut-preview .lut-swatch { width:32px; height:32px; border-radius:var(--r-s); flex-shrink:0;
+    background:linear-gradient(45deg,#f00,#0f0,#00f); }
+  .lut-preview .lut-name { flex:1; color:var(--text-1); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lut-preview .lut-remove { background:transparent; border:none; color:var(--text-2); cursor:pointer;
+    padding:4px; border-radius:var(--r-s); }
+  .lut-preview .lut-remove:hover { color:var(--red); background:rgba(255,92,114,.1); }
+
+  /* ============ CURVES ============ */
+  .curve-wrap { border:1px solid var(--border); border-radius:var(--r-l); overflow:hidden;
+    background:#0c0c0f; margin-top:10px; }
+  #curveCanvas { display:block; width:100%; aspect-ratio:1/1; cursor:crosshair; touch-action:none; }
+  .curve-presets { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; margin-top:8px; }
+  .mini-btn { background:var(--bg-2); border:1px solid var(--border); border-radius:var(--r-s);
+    color:var(--text-1); font-size:10px; font-family:inherit; padding:6px 4px; cursor:pointer;
+    transition:.12s; white-space:nowrap; }
+  .mini-btn:hover { background:var(--bg-3); color:var(--text-0); border-color:#33333d; }
+  .mini-btn.active { background:var(--bg-3); color:var(--text-0); border-color:var(--accent); }
+  .curve-info { margin-top:8px; font-size:10px; color:var(--text-2);
+    font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; }
+  .aspect-chips { display:flex; flex-wrap:wrap; gap:5px; }
+
+  .curve-list { display:flex; flex-direction:column; gap:3px; }
+  .cv-row { display:grid; grid-template-columns:24px 1fr 22px; align-items:center; gap:6px;
+    padding:4px 6px; border-radius:var(--r-m); background:var(--bg-2); border:1px solid var(--border);
+    cursor:grab; user-select:none; }
+  .cv-row:active { cursor:grabbing; }
+  .cv-row:hover { background:var(--bg-3); }
+  .cv-row.active { border-color:var(--accent); background:#2c2117; }
+  .cv-row.off .cv-name { opacity:.45; }
+  .cv-tg { background:transparent; border:none; color:var(--text-1); cursor:pointer;
+    width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+    border-radius:var(--r-s); padding:0; }
+  .cv-tg:hover { color:var(--text-0); background:rgba(255,255,255,.06); }
+  .cv-name { font-size:11px; color:var(--text-0); white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; padding:2px 3px; border-radius:var(--r-s); outline:none; }
+  .cv-name[contenteditable="true"] { background:var(--bg-0); box-shadow:0 0 0 1px var(--accent-soft);
+    cursor:text; user-select:text; }
+  .cv-del { background:transparent; border:none; color:var(--text-2); cursor:pointer;
+    font-size:14px; line-height:1; border-radius:var(--r-s); height:22px; padding:0; }
+  .cv-del:hover:not(:disabled) { color:var(--red); background:rgba(255,92,114,.1); }
+  .cv-del:disabled { opacity:.3; cursor:not-allowed; }
+
+  /* ============ LAYERS ============ */
+  .ps-layers { background:var(--bg-1); border:1px solid var(--border-soft); border-radius:var(--r-l);
+    display:flex; flex-direction:column; min-height:0; }
+  .ps-blend-bar { display:grid; grid-template-columns:1fr 86px; gap:6px; padding:8px;
+    border-bottom:1px solid var(--border-soft); }
+  .ps-blend-bar .select { padding:6px 10px; font-size:11px;
+    background-position:calc(100% - 12px) 50%, calc(100% - 7px) 50%; background-size:4px 4px; }
+  .ps-opacity { display:flex; align-items:center; gap:4px; background:var(--bg-2);
+    border:1px solid var(--border); border-radius:var(--r-m); padding:0 8px; font-size:11px; }
+  .ps-opacity input { width:40px; background:transparent; border:none; color:var(--text-0);
+    font-size:11px; font-family:inherit; outline:none; text-align:right;
+    font-variant-numeric:tabular-nums; }
+  .ps-opacity input::-webkit-outer-spin-button,
+  .ps-opacity input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .ps-opacity span { color:var(--text-2); }
+
+  .ps-layer-list { max-height:300px; overflow-y:auto; padding:4px; }
+  .ps-layer-list::-webkit-scrollbar { width:6px; }
+  .ps-layer-list::-webkit-scrollbar-thumb { background:#2c2c34; border-radius:3px; }
+  .ps-layer { display:grid; grid-template-columns:22px 36px 1fr auto; align-items:center; gap:6px;
+    padding:5px 6px; border-radius:var(--r-m); margin-bottom:2px; cursor:grab; user-select:none;
+    border:1px solid transparent; transition:background .1s; }
+  .ps-layer:active { cursor:grabbing; }
+  .ps-layer:hover { background:var(--bg-2); }
+  .ps-layer.active { background:#2c2117; border-color:#4a3520; }
+  .ps-layer.off .ps-name, .ps-layer.off .ps-thumb, .ps-layer.off .ps-badge { opacity:.4; }
+  .ps-layer.dragging, .cv-row.dragging { opacity:.4; }
+  .ps-layer.drop-above, .cv-row.drop-above { box-shadow:inset 0 2px 0 var(--accent); }
+  .ps-layer.drop-below, .cv-row.drop-below { box-shadow:inset 0 -2px 0 var(--accent); }
+  .ps-eye { width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+    background:transparent; border:none; color:var(--text-1); cursor:pointer; border-radius:var(--r-s); }
+  .ps-eye:hover { color:var(--text-0); background:rgba(255,255,255,.06); }
+  .ps-thumb { width:36px; height:36px; border-radius:var(--r-s); border:1px solid var(--border);
+    overflow:hidden; background:#17171b;
+    background-image:linear-gradient(45deg,var(--checker-1) 25%,transparent 25%),
+      linear-gradient(-45deg,var(--checker-1) 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,var(--checker-1) 75%),
+      linear-gradient(-45deg,transparent 75%,var(--checker-1) 75%);
+    background-size:8px 8px; background-position:0 0,0 4px,4px -4px,-4px 0; }
+  .ps-thumb canvas { width:100%; height:100%; display:block; }
+  .ps-name { font-size:11.5px; color:var(--text-0); white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; padding:2px 4px; border-radius:var(--r-s); outline:none; }
+  .ps-name[contenteditable="true"] { background:var(--bg-0); box-shadow:0 0 0 1px var(--accent-soft);
+    cursor:text; user-select:text; }
+  .ps-badge { font-size:8.5px; color:var(--text-2); font-family:ui-monospace,monospace;
+    text-transform:uppercase; letter-spacing:.05em; padding:2px 5px; border-radius:3px;
+    background:rgba(255,255,255,.04); }
+  .ps-badge.type { color:var(--accent-soft); background:var(--accent-dim); }
+
+  .ps-toolbar { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; padding:6px;
+    border-top:1px solid var(--border-soft); }
+  .ps-toolbar button { background:var(--bg-2); border:1px solid var(--border); color:var(--text-1);
+    padding:7px 0; border-radius:var(--r-s); cursor:pointer; display:flex; align-items:center;
+    justify-content:center; transition:.1s; }
+  .ps-toolbar button:hover:not(:disabled) { background:var(--bg-3); color:var(--text-0); border-color:#33333d; }
+  .ps-toolbar button:disabled { opacity:.35; cursor:not-allowed; }
+  .ps-toolbar button.danger { color:var(--red); }
+  .ps-toolbar button.danger:hover:not(:disabled) { background:rgba(255,92,114,.1); border-color:rgba(255,92,114,.4); }
+
+  .ps-status { padding:6px 10px; font-size:10px; font-family:ui-monospace,monospace;
+    font-variant-numeric:tabular-nums; color:var(--text-2); border-top:1px solid var(--border-soft); }
+
+  /* ============ MODALS ============ */
+  .modal-backdrop { position:fixed; inset:0; z-index:200; display:none; align-items:center;
+    justify-content:center; background:rgba(8,8,10,.7); backdrop-filter:blur(3px); padding:24px; }
+  .modal-backdrop.show { display:flex; }
+  .modal-card { background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
+    width:min(600px,100%); max-height:min(84vh,760px); display:flex; flex-direction:column;
+    box-shadow:0 24px 64px rgba(0,0,0,.5); overflow:hidden; }
+  .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+    padding:16px 18px 12px; border-bottom:1px solid var(--border-soft); }
+  .modal-title { font-size:13px; font-weight:700; }
+  .modal-sub { font-size:11px; color:var(--text-2); margin-top:2px; }
+  .modal-body { padding:4px 18px 14px; overflow-y:auto; }
+  .modal-body::-webkit-scrollbar { width:6px; }
+  .modal-body::-webkit-scrollbar-thumb { background:#2c2c34; border-radius:3px; }
+  .modal-foot { display:flex; gap:8px; padding:12px 18px 6px; }
+  .modal-footnote { padding:2px 18px 14px; font-size:10.5px; color:var(--text-2); line-height:1.5; }
+  #exportPreviewImg { max-width:100%; max-height:44vh; object-fit:contain; border-radius:var(--r-l);
+    border:1px solid var(--border); display:block; margin:0 auto;
+    background-color:#121216;
+    background-image:linear-gradient(45deg,var(--checker-1) 25%,transparent 25%),
+      linear-gradient(-45deg,var(--checker-1) 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,var(--checker-1) 75%),
+      linear-gradient(-45deg,transparent 75%,var(--checker-1) 75%);
+    background-size:16px 16px; background-position:0 0,0 8px,8px -8px,-8px 0; }
+
+  /* Help modal */
+  .help-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 28px; }
+  .help-group-title { font-size:9.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--text-2); margin:14px 0 4px; }
+  .help-row { display:flex; justify-content:space-between; align-items:center; gap:12px;
+    padding:5px 0; border-bottom:1px dashed var(--border-soft); font-size:11.5px; color:var(--text-1); }
+  .help-row:last-child { border-bottom:none; }
+  .help-row .keys { display:flex; gap:3px; align-items:center; white-space:nowrap; }
+  .help-credits { margin:14px 18px 16px; padding:12px 14px; background:var(--bg-2);
+    border:1px solid var(--border-soft); border-radius:var(--r-l); display:flex;
+    flex-direction:column; gap:4px; font-size:11px; color:var(--text-2); line-height:1.5; }
+  .help-credits b { color:var(--text-0); font-weight:600; }
+  .help-credits .credits-brand { font-size:10px; font-weight:700; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--accent-soft); margin-bottom:2px; }
+
+  /* ============ TOASTS ============ */
+  .toasts { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:300;
+    display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:none; }
+  .toast { background:rgba(22,22,26,.96); border:1px solid var(--border);
+    border-left:2px solid var(--accent); color:var(--text-0); padding:8px 16px;
+    border-radius:var(--r-m); font-size:12px; opacity:0; transform:translateY(8px);
+    transition:.25s; box-shadow:0 6px 24px rgba(0,0,0,.4); backdrop-filter:blur(8px); }
+  .toast.in { opacity:1; transform:none; }
+  .toast.err { border-left-color:var(--red); color:#ffc2cc; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ============ TOP BAR ============ -->
+  <header class="topbar">
+    <div class="tb-left">
+      <div class="doc" id="docTitle">Untitled</div>
+    </div>
+    <div class="tb-right">
+      <button class="tb-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h11a5 5 0 0 1 0 10h-3"/><polyline points="8 6 4 10 8 14"/></svg>
+      </button>
+      <button class="tb-btn" id="redoBtn" title="Redo (Ctrl+Shift+Z)" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10H9a5 5 0 0 0 0 10h3"/><polyline points="16 6 20 10 16 14"/></svg>
+      </button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" id="compareBtn" title="Hold to compare with original">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+        <span>Compare</span>
+      </button>
+      <button class="tb-btn" id="splitBtn" title="Split view (S)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="9" y1="9" x2="9" y2="15"/><line x1="15" y1="9" x2="15" y2="15"/></svg>
+        <span>Split</span>
+      </button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" id="zoomOutBtn" title="Zoom out ( − )">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="tb-btn zoom-label" id="zoomFitBtn" title="Fit to screen (0)">100%</button>
+      <button class="tb-btn" id="zoomInBtn" title="Zoom in ( + )">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="tb-btn" id="zoom100Btn" title="Actual pixels (1)" style="font-family:ui-monospace,monospace;font-size:10px;">1:1</button>
+      <span class="tb-sep"></span>
+      <label class="upload-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload
+        <input type="file" id="fileInput" accept="image/*" style="display:none;">
+      </label>
+      <button class="export-btn" id="quickExportBtn" title="Export (Ctrl+E)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" id="helpBtn" title="Keyboard shortcuts & credits">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.6 2.6 0 1 1 3.6 2.4c-.8.34-1.2.9-1.2 1.7"/><line x1="12" y1="16.8" x2="12" y2="16.9"/></svg>
+        <span>Help</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- ============ STAGE ============ -->
+    <div class="stage" id="stage">
+      <div class="stage-scroll" id="stageScroll">
+        <div class="stage-inner" id="stageInner">
+          <canvas id="glCanvas"></canvas>
+          <div class="crop-overlay" id="cropOverlay">
+            <div class="crop-rect" id="cropRectEl">
+              <div class="crop-grid"></div>
+              <div class="crop-handle" data-h="nw"></div><div class="crop-handle" data-h="n"></div>
+              <div class="crop-handle" data-h="ne"></div><div class="crop-handle" data-h="e"></div>
+              <div class="crop-handle" data-h="se"></div><div class="crop-handle" data-h="s"></div>
+              <div class="crop-handle" data-h="sw"></div><div class="crop-handle" data-h="w"></div>
+            </div>
+          </div>
+          <div class="split-line" id="splitLine">
+            <div class="split-knob" id="splitKnob">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="compare-tag" id="beforeTag">BEFORE</div>
+      <div class="compare-tag" id="afterTag">AFTER</div>
+
+      <div class="empty" id="emptyState">
+        <div class="empty-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </div>
+        <div class="empty-title">Open an image to begin</div>
+        <div class="empty-sub">Crop, curves, LUTs and export. Everything is processed on your device.</div>
+        <div class="empty-actions">
+          <label class="upload-btn" style="cursor:pointer;">Browse files<input type="file" id="fileInput2" accept="image/*" style="display:none;"></label>
+          <button class="btn" id="sampleBtn" style="width:auto;padding:7px 14px;">Load sample</button>
+        </div>
+        <div class="empty-kbd">or paste from clipboard with <kbd>Ctrl</kbd> <kbd>V</kbd></div>
+      </div>
+      <div class="drop-overlay" id="dropOverlay"><div>Drop to open</div></div>
+    </div>
+
+    <!-- ============ RAIL ============ -->
+    <nav class="rail" id="rail">
+      <button class="rail-btn" data-panel="enhance" title="Enhance">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>
+        <span>Enhance</span>
+      </button>
+      <button class="rail-btn" data-panel="curves" title="Curves">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4v16h16"/><path d="M6.5 18c6.5 0 6-12 11.5-12"/></svg>
+        <span>Curves</span>
+      </button>
+      <button class="rail-btn active" data-panel="adjust" title="Adjust">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.4" fill="var(--bg-1)"/><line x1="4" y1="15" x2="20" y2="15"/><circle cx="15" cy="15" r="2.4" fill="var(--bg-1)"/></svg>
+        <span>Adjust</span>
+      </button>
+      <button class="rail-btn" data-panel="color" title="Color">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3c3.5 4.2 6 7.2 6 10a6 6 0 1 1-12 0c0-2.8 2.5-5.8 6-10z"/></svg>
+        <span>Color</span>
+      </button>
+      <button class="rail-btn" data-panel="transform" title="Transform">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/></svg>
+        <span>Transform</span>
+      </button>
+      <button class="rail-btn" data-panel="layers" title="Layers (work in progress)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><polygon points="12 3 21 8 12 13 3 8"/><polyline points="3 13 12 18 21 13"/><polyline points="3 17.5 12 22.5 21 17.5"/></svg>
+        <span>Layers</span>
+      </button>
+      <button class="rail-btn" data-panel="export" title="Export">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export</span>
+      </button>
+    </nav>
+
+    <!-- ============ PANEL ============ -->
+    <aside class="panel">
+      <div class="panel-head">
+        <div class="panel-title" id="panelTitle">Adjust</div>
+        <div class="panel-sub" id="panelSub">Light · color · detail</div>
+      </div>
+      <div class="panel-content">
+        <div class="panel-body" id="panelBody">
+
+          <!-- ENHANCE -->
+          <div class="tab-content" id="panel-enhance">
+            <div class="section">
+              <button class="btn accent" id="autoEnhanceBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+                Auto Enhance
+              </button>
+              <div class="hint" style="margin-top:10px;">Stretches each channel's tonal range, adds a gentle contrast curve, plus vibrance and sharpening. Fully editable afterwards.</div>
+            </div>
+            <div class="divider"></div>
+            <div class="section">
+              <div class="section-label">Auto corrections</div>
+              <div class="btn-row" style="margin-bottom:8px;">
+                <button class="btn" id="autoToneBtn">Auto Tone</button>
+                <button class="btn" id="autoContrastBtn">Auto Contrast</button>
+              </div>
+              <div class="btn-row">
+                <button class="btn" id="autoColorBtn">Auto Color</button>
+                <button class="btn" id="autoResetBtn">Reset all</button>
+              </div>
+              <div class="hint" style="margin-top:10px;">
+                Auto fixes write into the <b>active curve layer</b> (Curves panel). <b>Auto Tone</b> stretches each channel, <b>Auto Contrast</b> stretches luminosity only, <b>Auto Color</b> neutralises colour casts.
+              </div>
+            </div>
+          </div>
+
+          <!-- CURVES -->
+          <div class="tab-content" id="panel-curves">
+            <div class="section">
+              <div class="section-label">Curve layers</div>
+              <div class="curve-list" id="curveList"></div>
+              <button class="mini-btn" id="addCurveBtn" style="width:100%;margin-top:6px;">＋ New curve layer</button>
+              <div class="hint" style="margin-top:8px;">Apply in list order (first row first). <b>Drag rows to reorder</b> · the eye toggles bypass · the faint line shows the combined result.</div>
+            </div>
+            <div class="divider"></div>
+            <div class="section">
+              <div class="seg" id="curveChanSeg">
+                <button class="seg-btn active" data-chan="rgb">RGB</button>
+                <button class="seg-btn" data-chan="r">R</button>
+                <button class="seg-btn" data-chan="g">G</button>
+                <button class="seg-btn" data-chan="b">B</button>
+              </div>
+              <div class="curve-wrap" id="curveWrap">
+                <canvas id="curveCanvas"></canvas>
+              </div>
+              <div class="curve-presets" id="curvePresets">
+                <button class="mini-btn" data-preset="soft">Soft S</button>
+                <button class="mini-btn" data-preset="punch">Punch</button>
+                <button class="mini-btn" data-preset="fade">Fade</button>
+                <button class="mini-btn" data-preset="invert">Invert</button>
+                <button class="mini-btn" data-preset="reset">Reset</button>
+              </div>
+              <div class="curve-info" id="curveInfo"></div>
+              <button class="btn" id="resetCurvesBtn" style="margin-top:10px;">Reset active curve layer</button>
+              <div class="hint">Click to add a point · drag to move (endpoints move vertically only) · double-click or press <b>Delete</b> to remove the selected point.</div>
+            </div>
+          </div>
+
+          <!-- ADJUST -->
+          <div class="tab-content active" id="panel-adjust">
+            <div id="adjustSections"></div>
+            <div class="divider"></div>
+            <button class="btn" id="resetAdjBtn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+              Reset adjustments
+            </button>
+          </div>
+
+          <!-- COLOR -->
+          <div class="tab-content" id="panel-color">
+            <div class="section">
+              <div class="section-label">Presets</div>
+              <div class="preset-grid" id="presetGrid"></div>
+              <div class="hint">Thumbnails are rendered from <b>your photo</b>. Presets load their values into the Adjust panel, keep tweaking from there.</div>
+            </div>
+            <div class="divider"></div>
+            <div class="section">
+              <div class="section-label">Color LUT (.cube)</div>
+              <div id="lutChip"></div>
+              <div class="row" style="margin-top:10px;">
+                <label>Intensity</label>
+                <input type="range" id="lutStrength" min="0" max="100" value="100" disabled>
+                <span class="val" id="lutStrengthVal">100</span>
+              </div>
+              <label class="btn" style="cursor:pointer;margin-top:6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                Load .cube LUT
+                <input type="file" id="lutInput" accept=".cube" style="display:none;">
+              </label>
+            </div>
+            <div class="divider"></div>
+            <div class="section">
+              <div class="section-label">Color isolate</div>
+              <div class="btn-row" style="margin-bottom:10px;">
+                <button class="btn" id="isoPickBtn" disabled title="Click a colour in the image to keep">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2.7s6.5 7 6.5 11.3a6.5 6.5 0 1 1-13 0C5.5 9.7 12 2.7 12 2.7z"/></svg>
+                  Pick colour
+                </button>
+                <button class="btn toggle" id="isoOnBtn" disabled style="flex:0 0 68px;">Off</button>
+              </div>
+              <div class="row" style="grid-template-columns:70px 1fr;">
+                <label>Target</label>
+                <div class="color-cell"><span class="iso-swatch" id="isoSwatch"></span><span id="isoHex" class="num">#ff2020</span></div>
+              </div>
+              <div class="row"><label>Range</label><input type="range" id="isoRange" min="0" max="100" value="35" disabled><span class="val" id="isoRangeVal">35</span></div>
+              <div class="row"><label>Feather</label><input type="range" id="isoFeather" min="0" max="100" value="18" disabled><span class="val" id="isoFeatherVal">18</span></div>
+              <div class="hint">Click <b>Pick colour</b>, then click the area you want to keep in the image. Everything else turns black &amp; white and the effect switches on automatically. Range widens the kept hue band, Feather softens the edge. <b>Esc</b> cancels the picker.</div>
+            </div>
+          </div>
+
+          <!-- TRANSFORM -->
+          <div class="tab-content" id="panel-transform">
+            <div class="section">
+              <div class="section-label">Crop tool</div>
+              <div class="aspect-chips" id="aspectChips">
+                <button class="mini-btn active" data-ar="free">Free</button>
+                <button class="mini-btn" data-ar="1">1:1</button>
+                <button class="mini-btn" data-ar="0.8">4:5</button>
+                <button class="mini-btn" data-ar="1.25">5:4</button>
+                <button class="mini-btn" data-ar="1.7778">16:9</button>
+                <button class="mini-btn" data-ar="0.5625">9:16</button>
+                <button class="mini-btn" data-ar="1.5">3:2</button>
+                <button class="mini-btn" data-ar="0.6667">2:3</button>
+              </div>
+              <div class="btn-row" style="margin-top:8px;">
+                <button class="btn" id="cropStartBtn">Start crop</button>
+              </div>
+              <div class="btn-row" id="cropActions" style="display:none;">
+                <button class="btn accent" id="cropApplyBtn">Apply</button>
+                <button class="btn" id="cropCancelBtn">Cancel</button>
+              </div>
+              <div class="curve-info num" id="cropDims"></div>
+              <div class="hint">Drag on the image to draw the frame. Handles resize · drag inside to move. Aspect chips snap to common ratios (1:1 post, 4:5 portrait, 9:16 story…).</div>
+            </div>
+            <div class="divider"></div>
+            <div class="section">
+              <div class="section-label">Rotate & flip</div>
+              <div class="btn-row" style="margin-bottom:12px;">
+                <button class="btn" id="rotLeftBtn" title="Rotate 90° left" style="flex:0 0 42px;padding:10px 0;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+                </button>
+                <button class="btn" id="rotRightBtn" title="Rotate 90° right" style="flex:0 0 42px;padding:10px 0;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>
+                </button>
+                <button class="btn toggle" id="flipHBtn">Flip H</button>
+                <button class="btn toggle" id="flipVBtn">Flip V</button>
+              </div>
+              <div class="row"><label>Angle</label><input type="range" id="angle" min="-45" max="45" value="0"><span class="val" id="angleVal">0°</span></div>
+              <div class="hint">Fine angles auto-zoom (straighten-style) so the frame is always filled, no empty corners.</div>
+            </div>
+            <div class="divider"></div>
+            <div class="section">
+              <div class="section-label">Zoom crop (watermarks)</div>
+              <div class="row"><label>Zoom</label><input type="range" id="cropZoom" min="0" max="60" value="0"><span class="val" id="cropZoomVal">0%</span></div>
+              <div class="row">
+                <label>Anchor</label>
+                <select class="select" id="cropAnchor" style="grid-column:2/4;">
+                  <option value="center" selected>Center (symmetric zoom)</option>
+                  <option value="right">Shift right (crop right edge)</option>
+                  <option value="topright">Top-right corner only</option>
+                  <option value="none">None (full image)</option>
+                </select>
+              </div>
+              <div class="hint">FiveM watermarks (<b>FiveM* (b3095)</b>, <b>Normal [Range]</b>) sit in the right corners, or use the crop tool above.</div>
+            </div>
+            <div class="divider"></div>
+            <button class="btn" id="resetTransformBtn">Reset transform</button>
+          </div>
+
+          <!-- LAYERS (locked, work in progress) -->
+          <div class="tab-content" id="panel-layers">
+            <div class="ps-layers">
+              <div class="ps-blend-bar">
+                <select class="select" id="psBlendMode" disabled>
+                  <option value="normal">Normal</option>
+                  <option value="multiply">Multiply</option>
+                  <option value="screen">Screen</option>
+                  <option value="overlay">Overlay</option>
+                  <option value="darken">Darken</option>
+                  <option value="lighten">Lighten</option>
+                  <option value="color-dodge">Color Dodge</option>
+                  <option value="color-burn">Color Burn</option>
+                  <option value="hard-light">Hard Light</option>
+                  <option value="soft-light">Soft Light</option>
+                  <option value="difference">Difference</option>
+                  <option value="exclusion">Exclusion</option>
+                </select>
+                <div class="ps-opacity">
+                  <input type="number" id="psOpacity" min="0" max="100" value="100" disabled>
+                  <span>%</span>
+                </div>
+              </div>
+              <div class="ps-layer-list" id="psLayerList"></div>
+              <div class="ps-toolbar">
+                <button id="ltAddImage" title="Add image layer" disabled>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                </button>
+                <button id="ltDup" title="Duplicate layer" disabled>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                </button>
+                <button id="ltUp" title="Move layer up" disabled>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                </button>
+                <button id="ltDown" title="Move layer down" disabled>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <button id="ltDel" class="danger" title="Delete layer (Del)" disabled>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+              </div>
+              <div class="ps-status num" id="psStatus">No document</div>
+            </div>
+            <input type="file" id="layerInput" accept="image/*" multiple style="display:none;">
+            <div class="hint" style="margin-top:10px;"><b>Drag rows to reorder</b> · click to select · double-click name to rename · drag layers <b>on the canvas</b> to move · <b>Del</b> deletes.</div>
+
+            <div class="section-label" style="margin-top:16px;">Layer adjustments</div>
+            <div id="layerAdjSec" class="field-disabled">
+              <div class="row"><label>Brightness</label><input type="range" id="la_b" min="0" max="200" value="100" disabled><span class="val" id="la_bVal">100</span></div>
+              <div class="row"><label>Contrast</label><input type="range" id="la_c" min="0" max="200" value="100" disabled><span class="val" id="la_cVal">100</span></div>
+              <div class="row"><label>Saturation</label><input type="range" id="la_s" min="0" max="200" value="100" disabled><span class="val" id="la_sVal">100</span></div>
+              <div class="row"><label>Warmth</label><input type="range" id="la_t" min="-100" max="100" value="0" disabled><span class="val" id="la_tVal">0</span></div>
+            </div>
+            <div class="hint">These sliders affect the <b>selected image layer only</b> — the base image is controlled by the Adjust panel.</div>
+          </div>
+
+          <!-- EXPORT -->
+          <div class="tab-content" id="panel-export">
+            <div class="section">
+              <div class="section-label">Format</div>
+              <div class="seg" id="exportFormatSeg">
+                <button class="seg-btn active" data-fmt="png">PNG</button>
+                <button class="seg-btn" data-fmt="jpeg">JPEG</button>
+              </div>
+            </div>
+            <div class="section">
+              <div class="row" id="qualityRow" style="opacity:.45;pointer-events:none;">
+                <label>Quality</label>
+                <input type="range" id="exportQuality" min="50" max="100" value="92">
+                <span class="val" id="exportQualityVal">92</span>
+              </div>
+              <div class="row">
+                <label>Scale</label>
+                <select class="select" id="exportScale" style="grid-column:2/4;">
+                  <option value="1" selected>100%</option>
+                  <option value="0.75">75%</option>
+                  <option value="0.5">50%</option>
+                  <option value="0.25">25%</option>
+                </select>
+              </div>
+              <div class="export-info" id="exportInfo">Load an image to export</div>
+            </div>
+            <div class="section">
+              <button class="btn accent" id="exportBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export image
+              </button>
+              <div class="hint">Ctrl+E exports with these settings. If the browser blocks downloads, a save panel with a preview opens instead.</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Layers lock overlay -->
+        <div class="panel-lock" id="panelLock" aria-hidden="true">
+          <div class="lock-badge">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><line x1="12" y1="14.5" x2="12" y2="16.5"/></svg>
+          </div>
+          <div class="lock-title">Work in progress</div>
+          <div class="lock-sub">Coming soon</div>
+        </div>
+      </div>
+
+      <!-- Always-visible reset footer -->
+      <div class="panel-footer">
+        <button class="btn danger-btn" id="resetAllBtn" disabled
+          title="Reset everything: adjustments, curves, crop, transforms, LUT, colour isolate and added layers">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+          Reset image
+        </button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Export fallback modal -->
+<div class="modal-backdrop" id="exportModal">
+  <div class="modal-card" style="width:min(520px,100%);">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Save file</div>
+        <div class="modal-sub" id="exportModalSub"></div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <img id="exportPreviewImg" alt="Export preview">
+    </div>
+    <div class="modal-foot">
+      <a class="btn accent" id="exportFallbackDl" download>Download file</a>
+      <button class="btn" id="exportModalClose">Close</button>
+    </div>
+    <div class="modal-footnote">No luck? Right-click (or long-press) the preview and choose "Save image as…".</div>
+  </div>
+</div>
+
+<!-- Help modal -->
+<div class="modal-backdrop" id="helpModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Keyboard & mouse</div>
+        <div class="modal-sub">Shortcuts, tools and gestures</div>
+      </div>
+      <button class="tb-btn" id="helpClose" title="Close (Esc)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="help-grid">
+        <div>
+          <div class="help-group-title">General</div>
+          <div class="help-row"><span>Undo / Redo</span><span class="keys"><kbd>Ctrl</kbd><kbd>Z</kbd> / <kbd>Ctrl</kbd><kbd>⇧</kbd><kbd>Z</kbd></span></div>
+          <div class="help-row"><span>Export image</span><span class="keys"><kbd>Ctrl</kbd><kbd>E</kbd></span></div>
+          <div class="help-row"><span>Paste image</span><span class="keys"><kbd>Ctrl</kbd><kbd>V</kbd></span></div>
+
+          <div class="help-group-title">View</div>
+          <div class="help-row"><span>Zoom at cursor</span><span class="keys"><kbd>Wheel</kbd> / <kbd>Ctrl</kbd><kbd>Wheel</kbd></span></div>
+          <div class="help-row"><span>Zoom in / out</span><span class="keys"><kbd>+</kbd> / <kbd>−</kbd></span></div>
+          <div class="help-row"><span>Fit / 100%</span><span class="keys"><kbd>0</kbd> / <kbd>1</kbd></span></div>
+          <div class="help-row"><span>Pan canvas</span><span class="keys"><kbd>Space</kbd> drag or <kbd>Middle</kbd> drag</span></div>
+          <div class="help-row"><span>Split view on/off</span><span class="keys"><kbd>S</kbd></span></div>
+        </div>
+        <div>
+          <div class="help-group-title">Curves</div>
+          <div class="help-row"><span>Add point</span><span class="keys">Click plot</span></div>
+          <div class="help-row"><span>Delete point</span><span class="keys"><kbd>Dbl-click</kbd> or <kbd>Del</kbd></span></div>
+          <div class="help-row"><span>Reorder curve layers</span><span class="keys">Drag rows</span></div>
+
+          <div class="help-group-title">Tools</div>
+          <div class="help-row"><span>Color isolate: pick colour</span><span class="keys">Droplet → click image</span></div>
+          <div class="help-row"><span>Cancel picker / crop</span><span class="keys"><kbd>Esc</kbd></span></div>
+          <div class="help-row"><span>Close dialogs</span><span class="keys"><kbd>Esc</kbd></span></div>
+        </div>
+      </div>
+      <div class="help-credits">
+        <div class="credits-brand">VitIMG · v2.0</div>
+        <div>Maintained by <b>Callum Bara</b> in the <b>VitalRP Discord</b>.</div>
+        <div>All processing happens locally in your browser, images are never uploaded.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+(function () {
+'use strict';
+
+// ================= Helpers =================
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function toast(msg, ok = true) {
+  const d = document.createElement('div');
+  d.className = 'toast' + (ok ? '' : ' err');
+  d.textContent = msg;
+  $('toasts').appendChild(d);
+  requestAnimationFrame(() => d.classList.add('in'));
+  setTimeout(() => { d.classList.remove('in'); setTimeout(() => d.remove(), 300); }, 2400);
+}
+
+function hexToRgb01(hex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return [1, 0, 0];
+  const n = parseInt(m[1], 16);
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+}
+function rgb2hsvJS(r, g, b){
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d > 0){
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6; if (h < 0) h += 1;
+  }
+  return [h, mx === 0 ? 0 : d / mx, mx];
+}
+
+// ================= DOM refs =================
+const canvas = $('glCanvas'), stageInner = $('stageInner'), stageScroll = $('stageScroll'),
+      stage = $('stage'), emptyState = $('emptyState'), dropOverlay = $('dropOverlay'),
+      docTitle = $('docTitle'),
+      cropOverlay = $('cropOverlay'), cropRectEl = $('cropRectEl'),
+      splitLineEl = $('splitLine'), splitKnob = $('splitKnob'),
+      panelBody = $('panelBody'), panelLock = $('panelLock');
+
+// ================= Constants / state =================
+const DEFAULT_ADJ = { exposure:0, brightness:100, contrast:100, highlights:0, shadows:0,
+  saturation:100, vibrance:0, temperature:0, tint:0, hue:0, sharpen:0, blur:0, vignette:0, grain:0,
+  clarity:0, dehaze:0, nr:0, bloom:0, ca:0, hal:0 };
+const ISO_DEF = () => ({ on:false, color:'#ff2020', range:35, feather:18 });
+const TDEF = () => ({ rot90:0, angle:0, flipH:false, flipV:false, cropZoom:0, anchor:'center',
+  crop:{ x:0, y:0, w:1, h:1 } });
+const LADJ = () => ({ b:100, c:100, s:100, t:0 });
+const BLEND_MODES = { normal:0, multiply:1, screen:2, overlay:3, darken:4, lighten:5,
+  'color-dodge':6, 'color-burn':7, 'hard-light':8, 'soft-light':9, difference:10, exclusion:11 };
+
+const defaultCurves = () => ({
+  rgb:[{x:0,y:0},{x:1,y:1}], r:[{x:0,y:0},{x:1,y:1}],
+  g:[{x:0,y:0},{x:1,y:1}],   b:[{x:0,y:0},{x:1,y:1}],
+});
+let curveSeq = 0;
+function newCurveLayer(name){
+  return { id:'c' + (++curveSeq), name: name || ('Curve ' + curveSeq), on:true, curves: defaultCurves() };
+}
+function copyCurves(c){
+  return ['rgb','r','g','b'].reduce((o,k) => (o[k] = c[k].map(p => ({ x:p.x, y:p.y })), o), {});
+}
+
+const ADJ_CONFIG = [
+  { section:'Light', items:[
+    ['exposure','Exposure',-100,100,1], ['brightness','Brightness',0,200,1],
+    ['contrast','Contrast',0,200,1], ['highlights','Highlights',-100,100,1], ['shadows','Shadows',-100,100,1] ]},
+  { section:'Color', items:[
+    ['saturation','Saturation',0,200,1], ['vibrance','Vibrance',0,100,1],
+    ['temperature','Temperature',-100,100,1], ['tint','Tint',-100,100,1], ['hue','Hue Shift',-180,180,1] ]},
+  { section:'Detail', items:[
+    ['sharpen','Sharpen',0,100,1], ['blur','Blur',0,10,0.5],
+    ['vignette','Vignette',0,100,1], ['grain','Grain',0,100,1] ]},
+  { section:'Effects', items:[
+    ['clarity','Clarity',0,100,1], ['dehaze','Dehaze',0,100,1],
+    ['nr','Noise Red.',0,100,1], ['bloom','Bloom',0,100,1],
+    ['hal','Halation',0,100,1], ['ca','Chromatic AB',0,100,1] ]},
+];
+
+const PRESETS = [
+  ['Original', {}],
+  ['Vivid',    { saturation:150, contrast:112, vibrance:30 }],
+  ['Warm',     { temperature:40, saturation:112 }],
+  ['Cool',     { temperature:-40, vibrance:20 }],
+  ['Fade',     { contrast:85, brightness:105, saturation:82, shadows:20 }],
+  ['Film',     { contrast:104, saturation:88, temperature:12, grain:28, shadows:12, highlights:-8, hal:25 }],
+  ['Noir',     { saturation:0, contrast:135, brightness:92, vignette:40, grain:18 }],
+  ['Sepia',    { saturation:40, temperature:60, tint:15, contrast:96 }],
+  ['Matte',    { contrast:82, shadows:28, highlights:-12, saturation:92 }],
+  ['Punch',    { contrast:124, saturation:124, sharpen:30, vibrance:25 }],
+  ['Sunset',   { temperature:52, tint:10, saturation:120, highlights:-18, shadows:14, hal:30 }],
+  ['Cyber',    { hue:-24, saturation:142, contrast:114, temperature:-28, sharpen:15 }],
+];
+
+const PANELS = {
+  enhance:   ['Enhance','Auto fixes & one-click boost'],
+  curves:    ['Curves','Stackable tone curves per channel'],
+  adjust:    ['Adjust','Light · color · detail · effects'],
+  color:     ['Color','Presets · LUTs · color isolate'],
+  transform: ['Transform','Crop · rotate · flip'],
+  layers:    ['Layers','Work in progress'],
+  export:    ['Export','PNG & JPEG output'],
+};
+
+const CHAN_NAMES  = { rgb:'RGB (master)', r:'Red', g:'Green', b:'Blue' };
+const CHAN_COLORS = { rgb:'#e8e8f0', r:'#ff5f66', g:'#4ade80', b:'#5aa2ff' };
+
+const state = {
+  adj: { ...DEFAULT_ADJ },
+  transform: TDEF(),
+  curveLayers: [],
+  lut: null,
+  lutStrength: 100,
+  iso: ISO_DEF(),
+};
+let activeCurveId = null;
+(function initCurves(){
+  const L = newCurveLayer();
+  state.curveLayers.push(L);
+  activeCurveId = L.id;
+})();
+function CL(){
+  return state.curveLayers.find(c => c.id === activeCurveId) || state.curveLayers[0] || null;
+}
+
+let layers = [];
+let activeLayerId = null;
+let baseAsset = null;
+const assets = new Map();
+let lutSize = 32, lutText = null;
+let idc = 0;
+
+let history = [], histIdx = -1;
+let zoomFactor = null;
+let compareOn = false;
+let splitOn = false, splitX = 0.5, splitDrag = false;
+let exportFmt = 'png', exportQuality = 92, exportScale = 1;
+let HIST = null;
+
+let cropMode = false, cropSession = null, cropAspect = null, savedAngle = 0;
+let cropRect = { x:0.1, y:0.1, w:0.8, h:0.8 };
+
+let spaceHeld = false, panDrag = null;
+let selPt = -1;
+
+// Eyedropper (color isolate)
+const sampleCanvas = document.createElement('canvas');
+const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently:true });
+let sampleW = 0, sampleH = 0, eyedropperOn = false;
+
+// ================= WebGL =================
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer:true, antialias:false, premultipliedAlpha:false })
+        || canvas.getContext('experimental-webgl', { preserveDrawingBuffer:true, premultipliedAlpha:false });
+if (!gl) { alert('WebGL not supported.'); return; }
+
+const VERT = `
+  attribute vec2 a_pos; attribute vec2 a_uv; varying vec2 v_uv;
+  void main(){ v_uv = a_uv; gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+
+const FRAG_BASE = `
+  precision highp float;
+  varying vec2 v_uv;
+  uniform sampler2D u_tex;
+  uniform sampler2D u_lut;
+  uniform sampler2D u_curve;
+  uniform float u_useLut, u_lutSize, u_lutStrength, u_useCurve;
+  uniform vec2 u_texel, u_uvMin, u_uvMax;
+  uniform vec4 u_crop;
+  uniform float u_rot90, u_rotScale, u_angle, u_flipH, u_flipV, u_canvasAspect;
+  uniform float u_exposure, u_brightness, u_contrast, u_saturation, u_vibrance,
+    u_temperature, u_tint, u_highlights, u_shadows, u_sharpen, u_hue,
+    u_vignette, u_grain, u_blur,
+    u_clarity, u_dehaze, u_nr, u_bloom, u_ca, u_hal;
+  uniform float u_iso, u_isoRange, u_isoFeather;
+  uniform vec3 u_isoColor, u_isoHsv;
+
+  float rand(vec2 co){ return fract(sin(dot(co, vec2(12.9898,78.233))) * 43758.5453); }
+  vec3 sampleImg(vec2 uv){ return texture2D(u_tex, uv).rgb; }
+
+  vec3 blurN(vec2 uv, float r){
+    if (r < 0.01) return sampleImg(uv);
+    vec2 o = u_texel * r;
+    vec3 sum = vec3(0.0); float wsum = 0.0;
+    for (int i = -2; i <= 2; i++){
+      for (int j = -2; j <= 2; j++){
+        float w = exp(-float(i*i + j*j) / 2.5);
+        sum += sampleImg(uv + vec2(float(i), float(j)) * o) * w;
+        wsum += w;
+      }
+    }
+    return sum / wsum;
+  }
+
+  mat3 hueMatrix(float a){
+    float c = cos(a); float s = sin(a);
+    return mat3(
+      0.299+0.701*c+0.168*s,  0.299-0.299*c-0.328*s,  0.299-0.300*c+1.250*s,
+      0.587-0.587*c+0.330*s,  0.587+0.413*c+0.035*s,  0.587-0.588*c-1.050*s,
+      0.114-0.114*c-0.497*s,  0.114-0.114*c+0.292*s,  0.114+0.886*c-0.203*s);
+  }
+
+  vec3 rgb2hsv(vec3 c){
+    vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+  }
+
+  vec3 applyLut(vec3 color){
+    float n = u_lutSize;
+    vec3 c = clamp(color, 0.0, 1.0);
+    float bi = c.b * (n - 1.0);
+    float bf = fract(bi);
+    float bl = floor(bi);
+    float bh = min(bl + 1.0, n - 1.0);
+    vec2 uvL = vec2((c.r*(n-1.0) + bl*n + 0.5)/(n*n), (c.g*(n-1.0) + 0.5)/n);
+    vec2 uvH = vec2((c.r*(n-1.0) + bh*n + 0.5)/(n*n), (c.g*(n-1.0) + 0.5)/n);
+    return mix(texture2D(u_lut, uvL).rgb, texture2D(u_lut, uvH).rgb, bf);
+  }
+
+  vec3 applyCurves(vec3 col){
+    vec3 c = clamp(col, 0.0, 1.0);
+    float r = texture2D(u_curve, vec2(c.r, 0.5)).r;
+    float g = texture2D(u_curve, vec2(c.g, 0.5)).g;
+    float b = texture2D(u_curve, vec2(c.b, 0.5)).b;
+    r = texture2D(u_curve, vec2(clamp(r, 0.0, 1.0), 0.5)).a;
+    g = texture2D(u_curve, vec2(clamp(g, 0.0, 1.0), 0.5)).a;
+    b = texture2D(u_curve, vec2(clamp(b, 0.0, 1.0), 0.5)).a;
+    return vec3(r, g, b);
+  }
+
+  void main(){
+    vec2 uv = v_uv;
+    if (u_flipH > 0.5) uv.x = 1.0 - uv.x;
+    if (u_flipV > 0.5) uv.y = 1.0 - uv.y;
+    float r = mod(u_rot90, 4.0);
+    if (r > 0.5 && r < 1.5)       uv = vec2(1.0 - uv.y, uv.x);
+    else if (r >= 1.5 && r < 2.5) uv = vec2(1.0 - uv.x, 1.0 - uv.y);
+    else if (r >= 2.5)            uv = vec2(uv.y, 1.0 - uv.x);
+    if (abs(u_angle) > 0.0005){
+      vec2 p = uv - 0.5;
+      p.x *= u_canvasAspect;
+      float ca = cos(u_angle), sa = sin(u_angle);
+      p = vec2(p.x*ca - p.y*sa, p.x*sa + p.y*ca);
+      p /= u_rotScale;             // straighten auto-zoom: keeps the frame filled
+      p.x /= u_canvasAspect;
+      uv = p + 0.5;
+    }
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0){
+      gl_FragColor = vec4(0.0); return;
+    }
+
+    vec2 nrm = vec2(uv.x, 1.0 - uv.y);
+    vec2 css = u_crop.xy + mix(u_uvMin, u_uvMax, nrm) * u_crop.zw;
+    vec2 tuv = vec2(css.x, 1.0 - css.y);
+
+    vec3 col;
+    if (u_ca > 0.001){
+      vec2 cd = (tuv - 0.5) * u_ca * 0.035;
+      col = vec3(sampleImg(tuv + cd).r, sampleImg(tuv).g, sampleImg(tuv - cd).b);
+    } else {
+      col = sampleImg(tuv);
+    }
+
+    // Color isolate mask: hue + saturation distance to the target, computed on the
+    // original pixel colour so the droplet pick stays accurate under grading.
+    float isoMask = 1.0;
+    if (u_iso > 0.5){
+      vec3 hsvP = rgb2hsv(clamp(col, 0.0, 1.0));
+      float dh = abs(hsvP.x - u_isoHsv.x);
+      dh = min(dh, 1.0 - dh) * 2.0;
+      dh *= smoothstep(0.04, 0.22, hsvP.y);   // near-grey pixels: hue is meaningless
+      float dist = dh + abs(hsvP.y - u_isoHsv.y) * 0.5;
+      isoMask = 1.0 - smoothstep(u_isoRange, u_isoRange + u_isoFeather, dist);
+    }
+
+    if (u_nr > 0.001) col = mix(col, blurN(tuv, 1.3), u_nr * 0.85);
+    if (u_blur > 0.01) col = blurN(tuv, u_blur);
+    if (u_clarity > 0.001 || u_bloom > 0.001){
+      vec3 wide = blurN(tuv, 6.0);
+      if (u_clarity > 0.001) col += (col - wide) * u_clarity * 1.5;
+      if (u_bloom > 0.001) col += max(wide - vec3(0.55), vec3(0.0)) * u_bloom * 1.4;
+    }
+    if (u_hal > 0.001){
+      vec3 hb = blurN(tuv, 8.0);
+      vec3 hi = max(hb - vec3(0.58), vec3(0.0)) * 2.4;
+      vec3 glow = min(hi, vec3(1.25)) * vec3(1.0, 0.34, 0.14) * (u_hal * 0.9);
+      col = 1.0 - (1.0 - col) * (1.0 - glow);
+    }
+    if (u_dehaze > 0.001) col = mix(col, smoothstep(vec3(0.0), vec3(1.0), col), u_dehaze * 0.45);
+
+    if (u_sharpen > 0.001){
+      vec3 nb = sampleImg(tuv + vec2(u_texel.x, 0.0)) + sampleImg(tuv - vec2(u_texel.x, 0.0))
+              + sampleImg(tuv + vec2(0.0, u_texel.y)) + sampleImg(tuv - vec2(0.0, u_texel.y));
+      col += (col - nb * 0.25) * u_sharpen * 1.5;
+    }
+
+    col *= pow(2.0, u_exposure / 60.0);
+    col.r += u_temperature * 0.0012;  col.b -= u_temperature * 0.0012;
+    col.g -= u_tint * 0.0010;  col.r += u_tint * 0.0005;  col.b += u_tint * 0.0005;
+
+    if (u_highlights != 0.0 || u_shadows != 0.0){
+      float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col += u_shadows * (1.0 - smoothstep(0.0, 0.5, lum)) * 0.3;
+      col += u_highlights * smoothstep(0.5, 1.0, lum) * 0.3;
+    }
+
+    col = (col - 0.5) * u_contrast + 0.5;
+    col *= u_brightness;
+
+    if (u_useCurve > 0.5) col = applyCurves(col);
+
+    if (abs(u_hue) > 0.01) col = hueMatrix(radians(u_hue)) * col;
+
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col = mix(vec3(lum), col, u_saturation);
+
+    if (u_vibrance > 0.001){
+      float mx = max(col.r, max(col.g, col.b));
+      float mn = min(col.r, min(col.g, col.b));
+      col = mix(vec3(dot(col, vec3(0.2126,0.7152,0.0722))), col, 1.0 + u_vibrance * (1.0 - (mx - mn)));
+    }
+
+    if (u_useLut > 0.5) col = mix(col, applyLut(col), u_lutStrength);
+
+    // Apply isolation late: the kept colour and the grayscale both reflect grading
+    if (u_iso > 0.5){
+      float lumI = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(lumI), col, isoMask);
+    }
+
+    if (u_vignette > 0.001){
+      vec2 vc = v_uv - 0.5;
+      float d = length(vc) * 1.414;
+      col *= 1.0 - smoothstep(0.35, 1.05, d) * u_vignette;
+    }
+    if (u_grain > 0.001){
+      col += (rand(gl_FragCoord.xy + 7.13) - 0.5) * u_grain * 0.35;
+    }
+
+    gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+  }`;
+
+const FRAG_COMP = `
+  precision highp float;
+  varying vec2 v_uv;
+  uniform sampler2D u_base;
+  uniform sampler2D u_top;
+  uniform float u_opacity;
+  uniform int u_blend;
+  uniform vec2 u_pos, u_scale;
+  uniform vec4 u_lAdj;
+
+  vec3 blendf(vec3 b, vec3 s, int m){
+    if (m == 1)  return b * s;
+    if (m == 2)  return 1.0 - (1.0 - b) * (1.0 - s);
+    if (m == 3)  return mix(2.0*b*s, 1.0 - 2.0*(1.0-b)*(1.0-s), step(0.5, b));
+    if (m == 4)  return min(b, s);
+    if (m == 5)  return max(b, s);
+    if (m == 6)  return min(vec3(1.0), b / max(1.0 - s, vec3(0.004)));
+    if (m == 7)  return 1.0 - min(vec3(1.0), (1.0 - b) / max(s, vec3(0.004)));
+    if (m == 8)  return mix(2.0*b*s, 1.0 - 2.0*(1.0-b)*(1.0-s), step(0.5, s));
+    if (m == 9)  return mix(2.0*b*s + b*b*(1.0 - 2.0*s), sqrt(b)*(2.0*s - 1.0) + 2.0*b*(1.0 - s), step(0.5, s));
+    if (m == 10) return abs(b - s);
+    if (m == 11) return b + s - 2.0*b*s;
+    return s;
+  }
+
+  vec3 layerAdj(vec3 c){
+    c.r += u_lAdj.w * 0.0012; c.b -= u_lAdj.w * 0.0012;
+    c = (c - 0.5) * u_lAdj.y + 0.5;
+    c *= u_lAdj.x;
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    return mix(vec3(l), c, u_lAdj.z);
+  }
+
+  void main(){
+    vec4 base = texture2D(u_base, vec2(v_uv.x, 1.0 - v_uv.y));
+    vec2 luv = (v_uv - u_pos) / u_scale + 0.5;
+    vec4 src = vec4(0.0);
+    if (luv.x >= 0.0 && luv.x <= 1.0 && luv.y >= 0.0 && luv.y <= 1.0){
+      src = texture2D(u_top, luv);
+    }
+    float sa = src.a * u_opacity;
+    if (sa <= 0.002){ gl_FragColor = base; return; }
+    vec3 sc = layerAdj(src.rgb);
+    vec3 blended = (base.a < 0.5) ? sc : blendf(base.rgb, sc, u_blend);
+    vec3 outC = blended * sa + base.rgb * (1.0 - sa);
+    float outA = sa + base.a * (1.0 - sa);
+    gl_FragColor = vec4(outC, outA);
+  }`;
+
+const FRAG_COPY = `
+  precision mediump float;
+  varying vec2 v_uv;
+  uniform sampler2D u_tex;
+  uniform sampler2D u_orig;
+  uniform float u_split;
+  void main(){
+    vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
+    vec3 c = texture2D(u_tex, uv).rgb;
+    if (u_split >= 0.0){
+      vec3 o = texture2D(u_orig, uv).rgb;
+      c = mix(o, c, step(u_split, uv.x));
+      if (abs(uv.x - u_split) < 0.002) c = vec3(1.0, 0.62, 0.25);
+    }
+    gl_FragColor = vec4(c, 1.0);
+  }`;
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+  return s;
+}
+function makeProg(fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return { prog:p, aPos:gl.getAttribLocation(p,'a_pos'), aUv:gl.getAttribLocation(p,'a_uv'), u:{} };
+}
+function U(P, n){ if (!(n in P.u)) P.u[n] = gl.getUniformLocation(P.prog, n); return P.u[n]; }
+
+let BASE, COMP, COPY;
+try {
+  BASE = makeProg(FRAG_BASE);
+  COMP = makeProg(FRAG_COMP);
+  COPY = makeProg(FRAG_COPY);
+} catch (e) { alert('Shader error: ' + e.message); return; }
+
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 0,1,  1,-1, 1,1,  -1,1, 0,0,  1,1, 1,0]), gl.STATIC_DRAW);
+
+function drawQuad(P){
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+  gl.enableVertexAttribArray(P.aPos);
+  gl.vertexAttribPointer(P.aPos, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(P.aUv);
+  gl.vertexAttribPointer(P.aUv, 2, gl.FLOAT, false, 16, 8);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function makeTexture(src){
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  return t;
+}
+function makeFBO(w, h){
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fb };
+}
+let fboA = null, fboB = null;
+function resizeFBOs(){
+  if (fboA){ gl.deleteTexture(fboA.tex); gl.deleteFramebuffer(fboA.fb); }
+  if (fboB){ gl.deleteTexture(fboB.tex); gl.deleteFramebuffer(fboB.fb); }
+  fboA = makeFBO(canvas.width, canvas.height);
+  fboB = makeFBO(canvas.width, canvas.height);
+}
+
+const baseTexture = makeTexture(document.createElement('canvas'));
+const lutTexture = makeTexture(document.createElement('canvas'));
+const curveTexture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, curveTexture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+// ================= Curves =================
+function curveLUT(points){
+  const n = 256, out = new Float32Array(n);
+  const pts = points.slice().sort((a, b) => a.x - b.x);
+  const m = pts.length;
+  if (m < 2){ for (let i = 0; i < n; i++) out[i] = i / (n - 1); return out; }
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const dx = [], dy = [], slope = [];
+  for (let i = 0; i < m - 1; i++){
+    dx[i] = xs[i+1] - xs[i]; dy[i] = ys[i+1] - ys[i];
+    slope[i] = dy[i] / (Math.abs(dx[i]) < 1e-6 ? 1e-6 : dx[i]);
+  }
+  const tang = new Array(m);
+  tang[0] = slope[0]; tang[m-1] = slope[m-2];
+  for (let i = 1; i < m - 1; i++){
+    if (slope[i-1] * slope[i] <= 0) tang[i] = 0;
+    else {
+      const w1 = 2*dx[i] + dx[i-1], w2 = dx[i] + 2*dx[i-1];
+      tang[i] = (w1 + w2) / (w1/slope[i-1] + w2/slope[i]);
+    }
+  }
+  let seg = 0;
+  for (let i = 0; i < n; i++){
+    const x = i / (n - 1);
+    while (seg < m - 2 && x > xs[seg+1]) seg++;
+    while (seg > 0 && x < xs[seg]) seg--;
+    const h = Math.abs(dx[seg]) < 1e-6 ? 1e-6 : dx[seg];
+    const t = (x - xs[seg]) / h, t2 = t*t, t3 = t2*t;
+    out[i] = clamp(
+      (2*t3 - 3*t2 + 1) * ys[seg] + (t3 - 2*t2 + t) * h * tang[seg] +
+      (-2*t3 + 3*t2) * ys[seg+1] + (t3 - t2) * h * tang[seg+1], 0, 1);
+  }
+  return out;
+}
+function identityLUT(){
+  const o = new Float32Array(256);
+  for (let i = 0; i < 256; i++) o[i] = i / 255;
+  return o;
+}
+function layerChannelLUT(layer, chan){
+  const per = curveLUT(layer.curves[chan]);
+  const mas = curveLUT(layer.curves.rgb);
+  const out = new Float32Array(256);
+  for (let i = 0; i < 256; i++) out[i] = mas[Math.round(clamp(per[i], 0, 1) * 255)];
+  return out;
+}
+let composedLUT = { r: identityLUT(), g: identityLUT(), b: identityLUT() };
+
+function updateCurveTexture(){
+  const acc = { r: identityLUT(), g: identityLUT(), b: identityLUT() };
+  state.curveLayers.forEach(L => {
+    if (!L.on) return;
+    ['r','g','b'].forEach(c => {
+      const f = layerChannelLUT(L, c);
+      for (let i = 0; i < 256; i++) acc[c][i] = f[Math.round(clamp(acc[c][i], 0, 1) * 255)];
+    });
+  });
+  composedLUT = acc;
+  const data = new Uint8Array(256 * 4);
+  for (let i = 0; i < 256; i++){
+    data[i*4]   = Math.round(acc.r[i] * 255);
+    data[i*4+1] = Math.round(acc.g[i] * 255);
+    data[i*4+2] = Math.round(acc.b[i] * 255);
+    data[i*4+3] = i;
+  }
+  gl.bindTexture(gl.TEXTURE_2D, curveTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+}
+function isIdentity(pts){
+  return pts.length === 2 && pts[0].x === 0 && pts[0].y === 0 && pts[1].x === 1 && pts[1].y === 1;
+}
+function hasCurveEdit(){
+  return state.curveLayers.some(L => L.on &&
+    ['rgb','r','g','b'].some(k => !isIdentity(L.curves[k])));
+}
+
+// ================= Histograms =================
+function computeHistograms(src){
+  try {
+    const c = document.createElement('canvas');
+    const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+    const k = Math.min(1, 320 / Math.max(sw, sh));
+    c.width = Math.max(1, Math.round(sw * k));
+    c.height = Math.max(1, Math.round(sh * k));
+    const x = c.getContext('2d', { willReadFrequently:true });
+    x.drawImage(src, 0, 0, c.width, c.height);
+    const data = x.getImageData(0, 0, c.width, c.height).data;
+    const r = new Uint32Array(256), g = new Uint32Array(256), b = new Uint32Array(256), l = new Uint32Array(256);
+    for (let i = 0; i < data.length; i += 4){
+      r[data[i]]++; g[data[i+1]]++; b[data[i+2]]++;
+      l[(data[i]*0.2126 + data[i+1]*0.7152 + data[i+2]*0.0722) | 0]++;
+    }
+    HIST = { r, g, b, l, total: data.length / 4 };
+  } catch (e) { HIST = null; }
+}
+function histPercentile(hist, p){
+  if (!HIST) return p < 0.5 ? 0 : 1;
+  let acc = 0;
+  const target = HIST.total * p;
+  for (let v = 0; v < 256; v++){
+    acc += hist[v];
+    if (acc >= target) return v / 255;
+  }
+  return 1;
+}
+function histMean(hist){
+  if (!HIST || !HIST.total) return 0.5;
+  let s = 0;
+  for (let v = 0; v < 256; v++) s += v * hist[v];
+  return s / (HIST.total * 255);
+}
+
+function computeCrop(T){
+  const z = (T.cropZoom || 0) / 100;
+  if (T.anchor === 'none' || z <= 0) return [[0,0],[1,1]];
+  const visible = 1 / (1 + z), crop = 1 - visible, half = crop / 2;
+  if (T.anchor === 'right')    return [[0, half],[visible, 1 - half]];
+  if (T.anchor === 'topright') return [[0, crop],[visible, 1]];
+  return [[half, half],[1 - half, 1 - half]];
+}
+
+// Smallest zoom that keeps a fine-angle rotated image covering the whole canvas
+// (straighten-style auto-crop, so rotation never leaves empty corners)
+function autoRotateScale(angleDeg, aspect){
+  const th = Math.abs(angleDeg) * Math.PI / 180;
+  const c = Math.cos(th), s = Math.sin(th);
+  return Math.max(1, c + s / aspect, c + aspect * s);
+}
+
+function layerScale(L, cw, ch){
+  const a = assets.get(L.assetId);
+  if (!a) return [0.001, 0.001];
+  const fit = Math.min(cw / a.tw, ch / a.th);
+  return [a.tw * fit * L.scale / cw, a.th * fit * L.scale / ch];
+}
+
+// ================= Render =================
+let rafPending = false;
+function scheduleRender(){
+  if (rafPending || !baseAsset) return;
+  rafPending = true;
+  requestAnimationFrame(() => { rafPending = false; render(compareOn); });
+}
+
+function drawBasePass(fbo, A, T, color){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.fb);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(BASE.prog);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, baseTexture);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, lutTexture);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, curveTexture);
+  const [uvMin, uvMax] = computeCrop(T);
+  const c = T.crop || { x:0, y:0, w:1, h:1 };
+  gl.uniform1i(U(BASE,'u_tex'), 0);
+  gl.uniform1i(U(BASE,'u_lut'), 1);
+  gl.uniform1i(U(BASE,'u_curve'), 2);
+  gl.uniform1f(U(BASE,'u_useLut'), (color && state.lut) ? 1 : 0);
+  gl.uniform1f(U(BASE,'u_lutSize'), lutSize);
+  gl.uniform1f(U(BASE,'u_lutStrength'), state.lutStrength / 100);
+  gl.uniform1f(U(BASE,'u_useCurve'), (color && hasCurveEdit()) ? 1 : 0);
+  gl.uniform2f(U(BASE,'u_texel'), 1 / baseAsset.w, 1 / baseAsset.h);
+  gl.uniform2f(U(BASE,'u_uvMin'), uvMin[0], uvMin[1]);
+  gl.uniform2f(U(BASE,'u_uvMax'), uvMax[0], uvMax[1]);
+  gl.uniform4f(U(BASE,'u_crop'), c.x, c.y, c.w, c.h);
+  gl.uniform1f(U(BASE,'u_rot90'), ((T.rot90 % 4) + 4) % 4);
+  gl.uniform1f(U(BASE,'u_rotScale'), Math.abs(T.angle) > 0.0005
+    ? autoRotateScale(T.angle, canvas.width / canvas.height) : 1);
+  gl.uniform1f(U(BASE,'u_angle'), T.angle * Math.PI / 180);
+  gl.uniform1f(U(BASE,'u_flipH'), T.flipH ? 1 : 0);
+  gl.uniform1f(U(BASE,'u_flipV'), T.flipV ? 1 : 0);
+  gl.uniform1f(U(BASE,'u_canvasAspect'), canvas.width / canvas.height);
+  gl.uniform1f(U(BASE,'u_exposure'), A.exposure);
+  gl.uniform1f(U(BASE,'u_brightness'), A.brightness / 100);
+  gl.uniform1f(U(BASE,'u_contrast'), A.contrast / 100);
+  gl.uniform1f(U(BASE,'u_saturation'), A.saturation / 100);
+  gl.uniform1f(U(BASE,'u_vibrance'), A.vibrance / 100);
+  gl.uniform1f(U(BASE,'u_temperature'), A.temperature);
+  gl.uniform1f(U(BASE,'u_tint'), A.tint);
+  gl.uniform1f(U(BASE,'u_highlights'), A.highlights / 100);
+  gl.uniform1f(U(BASE,'u_shadows'), A.shadows / 100);
+  gl.uniform1f(U(BASE,'u_sharpen'), A.sharpen / 100);
+  gl.uniform1f(U(BASE,'u_hue'), A.hue);
+  gl.uniform1f(U(BASE,'u_vignette'), A.vignette / 100);
+  gl.uniform1f(U(BASE,'u_grain'), A.grain / 100);
+  gl.uniform1f(U(BASE,'u_blur'), A.blur);
+  gl.uniform1f(U(BASE,'u_clarity'), A.clarity / 100);
+  gl.uniform1f(U(BASE,'u_dehaze'), A.dehaze / 100);
+  gl.uniform1f(U(BASE,'u_nr'), A.nr / 100);
+  gl.uniform1f(U(BASE,'u_bloom'), A.bloom / 100);
+  gl.uniform1f(U(BASE,'u_hal'), A.hal / 100);
+  gl.uniform1f(U(BASE,'u_ca'), A.ca / 100);
+  const isoOn = color && state.iso && state.iso.on;
+  gl.uniform1f(U(BASE,'u_iso'), isoOn ? 1 : 0);
+  if (isoOn){
+    const ic = hexToRgb01(state.iso.color);
+    const ih = rgb2hsvJS(ic[0], ic[1], ic[2]);
+    gl.uniform3f(U(BASE,'u_isoColor'), ic[0], ic[1], ic[2]);
+    gl.uniform3f(U(BASE,'u_isoHsv'), ih[0], ih[1], ih[2]);
+    gl.uniform1f(U(BASE,'u_isoRange'), clamp(state.iso.range / 100, 0, 1));
+    gl.uniform1f(U(BASE,'u_isoFeather'), Math.max(0.02, state.iso.feather / 100 * 0.6));
+  } else {
+    gl.uniform3f(U(BASE,'u_isoColor'), 1, 0, 0);
+    gl.uniform3f(U(BASE,'u_isoHsv'), 0, 1, 1);
+    gl.uniform1f(U(BASE,'u_isoRange'), 0.35);
+    gl.uniform1f(U(BASE,'u_isoFeather'), 0.1);
+  }
+  drawQuad(BASE);
+}
+
+function render(compareMode){
+  if (!baseAsset || !fboA) return;
+  const A = compareMode ? DEFAULT_ADJ : state.adj;
+  const T = compareMode ? TDEF() : state.transform;
+
+  drawBasePass(fboA, A, T, !compareMode);
+
+  let cur = fboA, other = fboB, origTex = null;
+  if (!compareMode){
+    gl.useProgram(COMP.prog);
+    gl.uniform1i(U(COMP,'u_base'), 0);
+    gl.uniform1i(U(COMP,'u_top'), 1);
+    for (let i = 1; i < layers.length; i++){
+      const L = layers[i];
+      if (!L.visible || !L.texture) continue;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, other.fb);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cur.tex);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, L.texture);
+      const s = layerScale(L, canvas.width, canvas.height);
+      gl.uniform2f(U(COMP,'u_pos'), L.pos[0], L.pos[1]);
+      gl.uniform2f(U(COMP,'u_scale'), Math.max(s[0], 0.001), Math.max(s[1], 0.001));
+      gl.uniform1f(U(COMP,'u_opacity'), L.opacity / 100);
+      gl.uniform1i(U(COMP,'u_blend'), BLEND_MODES[L.blend] ?? 0);
+      const la = L.adj || LADJ();
+      gl.uniform4f(U(COMP,'u_lAdj'), la.b / 100, la.c / 100, la.s / 100, la.t);
+      drawQuad(COMP);
+      const t = cur; cur = other; other = t;
+    }
+    if (splitOn){
+      const T0 = { ...state.transform, cropZoom:0, anchor:'none' };
+      drawBasePass(other, DEFAULT_ADJ, T0, false);
+      origTex = other.tex;
+    }
+  }
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(COPY.prog);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cur.tex);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, origTex || cur.tex);
+  gl.uniform1i(U(COPY,'u_tex'), 0);
+  gl.uniform1i(U(COPY,'u_orig'), 1);
+  gl.uniform1f(U(COPY,'u_split'), (splitOn && !compareMode) ? splitX : -1);
+  drawQuad(COPY);
+}
+
+// ================= History =================
+function serializeState(){
+  return {
+    adj: { ...state.adj },
+    transform: JSON.parse(JSON.stringify(state.transform)),
+    curveLayers: state.curveLayers.map(L => ({ id:L.id, name:L.name, on:L.on, curves: copyCurves(L.curves) })),
+    activeCurveId,
+    lut: state.lut ? { ...state.lut } : null,
+    lutStrength: state.lutStrength,
+    iso: { ...state.iso },
+    activeLayerId,
+    layers: layers.map(L => ({
+      id:L.id, type:L.type, name:L.name, assetId:L.assetId || null,
+      visible:L.visible, opacity:L.opacity, blend:L.blend, pos:[...L.pos], scale:L.scale,
+      adj: L.adj ? { ...L.adj } : null,
+    })),
+  };
+}
+function restoreState(s){
+  state.adj = { ...DEFAULT_ADJ, ...(s.adj || {}) };
+  state.transform = { ...TDEF(), ...(s.transform || {}), crop: { ...(s.transform?.crop || { x:0,y:0,w:1,h:1 }) } };
+  if (s.curveLayers && s.curveLayers.length){
+    state.curveLayers = s.curveLayers.map(m => ({ id:m.id, name:m.name, on:m.on, curves: copyCurves(m.curves) }));
+    activeCurveId = state.curveLayers.some(c => c.id === s.activeCurveId) ? s.activeCurveId : state.curveLayers[0].id;
+  } else {
+    const L = newCurveLayer();
+    state.curveLayers = [L];
+    activeCurveId = L.id;
+  }
+  state.lut = s.lut; state.lutStrength = s.lutStrength;
+  state.iso = { ...ISO_DEF(), ...(s.iso || {}) };
+  activeLayerId = s.activeLayerId;
+  layers = (s.layers || []).map(m => ({ ...m, pos:[...(m.pos || [0.5,0.5])],
+    adj: m.adj ? { ...m.adj } : (m.type === 'image' ? LADJ() : null) }));
+  selPt = -1;
+  applyRotationSize();
+  syncUI();
+  scheduleRender();
+}
+function pushHistory(){
+  history.length = histIdx + 1;
+  history.push(JSON.stringify(serializeState()));
+  if (history.length > 60) history.shift();
+  histIdx = history.length - 1;
+  updateUndoButtons();
+}
+function undo(){ if (histIdx > 0){ if (cropMode) exitCrop(false); histIdx--; restoreState(JSON.parse(history[histIdx])); updateUndoButtons(); } }
+function redo(){ if (histIdx < history.length - 1){ if (cropMode) exitCrop(false); histIdx++; restoreState(JSON.parse(history[histIdx])); updateUndoButtons(); } }
+function updateUndoButtons(){
+  $('undoBtn').disabled = histIdx <= 0;
+  $('redoBtn').disabled = histIdx >= history.length - 1;
+}
+
+// ================= Layers =================
+const activeLayer = () => layers.find(L => L.id === activeLayerId) || null;
+
+function selectLayer(id){
+  activeLayerId = id;
+  renderLayerList();
+  syncBlendBar();
+  syncLayerAdj();
+}
+
+function makeThumb(src){
+  const c = document.createElement('canvas');
+  c.width = 72; c.height = 72;
+  const x = c.getContext('2d');
+  const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+  const k = Math.min(72 / sw, 72 / sh);
+  x.drawImage(src, (72 - sw * k) / 2, (72 - sh * k) / 2, sw * k, sh * k);
+  return c;
+}
+
+const EYE_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+const EYE_OFF_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>';
+
+function renderLayerList(){
+  const list = $('psLayerList');
+  list.innerHTML = '';
+  if (!baseAsset){ $('psStatus').textContent = 'No document'; return; }
+  for (let i = layers.length - 1; i >= 0; i--){
+    const L = layers[i];
+    const row = document.createElement('div');
+    row.className = 'ps-layer' + (L.id === activeLayerId ? ' active' : '') + (L.visible ? '' : ' off');
+    row.draggable = true;
+    row.dataset.id = L.id;
+
+    const eye = document.createElement('button');
+    eye.className = 'ps-eye';
+    eye.innerHTML = L.visible ? EYE_SVG : EYE_OFF_SVG;
+    eye.title = L.visible ? 'Hide layer' : 'Show layer';
+    eye.onclick = e => { e.stopPropagation(); L.visible = !L.visible; renderLayerList(); scheduleRender(); pushHistory(); };
+
+    const th = document.createElement('div');
+    th.className = 'ps-thumb';
+    const src = L.type === 'image' ? (assets.get(L.assetId) || {}).src : baseAsset.src;
+    if (src) th.appendChild(makeThumb(src));
+
+    const nm = document.createElement('div');
+    nm.className = 'ps-name';
+    nm.textContent = L.name;
+    nm.title = 'Double-click to rename';
+    nm.ondblclick = e => {
+      e.stopPropagation();
+      nm.contentEditable = 'true';
+      nm.focus();
+      const r = document.createRange(); r.selectNodeContents(nm);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    };
+    nm.onblur = () => {
+      nm.contentEditable = 'false';
+      const v = nm.textContent.trim();
+      if (v && v !== L.name){ L.name = v; pushHistory(); }
+      renderLayerList();
+    };
+    nm.onkeydown = e => {
+      if (e.key === 'Enter'){ e.preventDefault(); nm.blur(); }
+      if (e.key === 'Escape'){ nm.textContent = L.name; nm.blur(); }
+    };
+
+    const badge = document.createElement('span');
+    badge.className = 'ps-badge' + (L.type !== 'image' ? ' type' : '');
+    badge.textContent = L.type === 'base' ? 'BASE' : L.blend.replace('-', ' ').toUpperCase();
+
+    row.append(eye, th, nm, badge);
+    row.onclick = () => selectLayer(L.id);
+    list.appendChild(row);
+  }
+  $('psStatus').textContent = `${layers.length} layer${layers.length === 1 ? '' : 's'} · ${canvas.width} × ${canvas.height} px`;
+  const overlaySel = activeLayer() && activeLayer().type !== 'base';
+  $('ltDup').disabled = !overlaySel;
+  $('ltUp').disabled = !overlaySel;
+  $('ltDown').disabled = !overlaySel;
+  $('ltDel').disabled = !overlaySel;
+}
+
+function syncBlendBar(){
+  const L = activeLayer();
+  const overlay = L && L.type !== 'base';
+  $('psBlendMode').disabled = !overlay;
+  $('psOpacity').disabled = !overlay;
+  if (overlay){
+    $('psBlendMode').value = L.blend;
+    $('psOpacity').value = L.opacity;
+  }
+}
+
+function syncLayerAdj(){
+  const L = activeLayer();
+  const on = !!(L && L.type === 'image');
+  ['la_b','la_c','la_s','la_t'].forEach(id => $(id).disabled = !on);
+  $('layerAdjSec').classList.toggle('field-disabled', !on);
+  if (on){
+    $('la_b').value = L.adj.b; $('la_bVal').textContent = L.adj.b;
+    $('la_c').value = L.adj.c; $('la_cVal').textContent = L.adj.c;
+    $('la_s').value = L.adj.s; $('la_sVal').textContent = L.adj.s;
+    $('la_t').value = L.adj.t; $('la_tVal').textContent = L.adj.t;
+  }
+}
+
+function addImageFiles(files){
+  if (!baseAsset){ toast('Load an image first', false); return; }
+  [...files].forEach(f => {
+    if (!f.type.startsWith('image/')){ toast('Not an image: ' + f.name, false); return; }
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      const p = prepareSource(img);
+      const assetId = 'a' + (++idc);
+      assets.set(assetId, { src:p.src, tw:p.w, th:p.h, texture:makeTexture(p.src), url });
+      const L = { id:'l' + (++idc), type:'image',
+        name:f.name.replace(/\.[^.]+$/, '').slice(0, 28) || 'Image',
+        assetId, visible:true, opacity:100, blend:'normal', pos:[0.5, 0.5], scale:1, adj: LADJ() };
+      layers.push(L);
+      selectLayer(L.id);
+      scheduleRender();
+      pushHistory();
+      toast('Layer added: ' + L.name);
+    };
+    img.onerror = () => toast('Could not load ' + f.name, false);
+    img.src = url;
+  });
+}
+
+function duplicateLayer(){
+  const L = activeLayer();
+  if (!L || L.type === 'base') return;
+  const C = { ...L, id:'l' + (++idc), name:L.name + ' copy',
+    pos:[clamp(L.pos[0] + 0.02, 0, 1), clamp(L.pos[1] + 0.02, 0, 1)],
+    adj: L.adj ? { ...L.adj } : null };
+  layers.push(C);
+  selectLayer(C.id);
+  scheduleRender();
+  pushHistory();
+  toast('Layer duplicated');
+}
+
+function deleteLayer(){
+  const L = activeLayer();
+  if (!L || L.type === 'base'){ toast('The base layer can\u2019t be deleted', false); return; }
+  layers = layers.filter(x => x.id !== L.id);
+  const top = [...layers].reverse().find(x => x.type !== 'base');
+  activeLayerId = top ? top.id : 'base';
+  renderLayerList(); syncBlendBar(); syncLayerAdj();
+  scheduleRender(); pushHistory();
+  toast('Layer deleted');
+}
+
+function moveLayer(dir){
+  const i = layers.findIndex(L => L.id === activeLayerId);
+  if (i < 0) return;
+  const j = i + dir;
+  if (j < 1 || j >= layers.length) return;
+  [layers[i], layers[j]] = [layers[j], layers[i]];
+  renderLayerList(); scheduleRender(); pushHistory();
+}
+
+// ================= Drag-to-reorder =================
+function clearMarkers(container){
+  container.querySelectorAll('.drop-above, .drop-below').forEach(el => el.classList.remove('drop-above', 'drop-below'));
+}
+function enableDragReorder(container, onReorder){
+  let dragEl = null;
+  container.addEventListener('dragstart', e => {
+    const row = e.target.closest && e.target.closest('[draggable="true"]');
+    if (!row) return;
+    dragEl = row;
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', row.dataset.id); } catch(_) {}
+  });
+  container.addEventListener('dragover', e => {
+    e.preventDefault();
+    const row = e.target.closest && e.target.closest('[draggable="true"]');
+    clearMarkers(container);
+    if (!row || row === dragEl) return;
+    const r = row.getBoundingClientRect();
+    row.classList.add(e.clientY < r.top + r.height / 2 ? 'drop-above' : 'drop-below');
+  });
+  container.addEventListener('drop', e => {
+    e.preventDefault();
+    const row = e.target.closest && e.target.closest('[draggable="true"]');
+    clearMarkers(container);
+    if (!row || !dragEl || row === dragEl){ dragEl = null; return; }
+    const r = row.getBoundingClientRect();
+    const before = e.clientY < r.top + r.height / 2;
+    onReorder(dragEl.dataset.id, row.dataset.id, before);
+    dragEl = null;
+  });
+  container.addEventListener('dragend', () => { clearMarkers(container); if (dragEl) dragEl.classList.remove('dragging'); dragEl = null; });
+}
+enableDragReorder($('psLayerList'), (dragId, targetId, before) => {
+  const di = layers.findIndex(l => l.id === dragId), ti = layers.findIndex(l => l.id === targetId);
+  if (di < 1 || ti < 1) return;
+  let ins = before ? ti + 1 : ti;
+  if (di < ins) ins--;
+  ins = clamp(ins, 1, layers.length - 1);
+  const [m] = layers.splice(di, 1);
+  layers.splice(ins, 0, m);
+  renderLayerList(); syncBlendBar(); scheduleRender(); pushHistory();
+});
+enableDragReorder($('curveList'), (dragId, targetId, before) => {
+  const di = state.curveLayers.findIndex(l => l.id === dragId), ti = state.curveLayers.findIndex(l => l.id === targetId);
+  if (di < 0 || ti < 0) return;
+  let ins = before ? ti : ti + 1;
+  if (di < ins) ins--;
+  ins = clamp(ins, 0, state.curveLayers.length - 1);
+  const [m] = state.curveLayers.splice(di, 1);
+  state.curveLayers.splice(ins, 0, m);
+  updateCurveTexture(); renderCurveList(); drawCurveEditor(); scheduleRender(); pushHistory();
+});
+
+// ================= Canvas drag =================
+let dragState = null;
+function uvFromEvent(e){
+  const r = canvas.getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+}
+canvas.addEventListener('pointerdown', e => {
+  if (!baseAsset) return;
+  if (eyedropperOn){ e.preventDefault(); pickColorFromCanvas(e); return; }
+  if (cropMode || spaceHeld || e.button === 1) return;
+  const p = uvFromEvent(e);
+  let hit = null;
+  for (let i = layers.length - 1; i > 0; i--){
+    const L = layers[i];
+    if (!L.visible) continue;
+    const s = layerScale(L, canvas.width, canvas.height);
+    if (Math.abs(p[0] - L.pos[0]) <= s[0] / 2 && Math.abs(p[1] - L.pos[1]) <= s[1] / 2){ hit = L; break; }
+  }
+  if (hit){
+    selectLayer(hit.id);
+    dragState = { L:hit, ox:p[0] - hit.pos[0], oy:p[1] - hit.pos[1], moved:false };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.classList.add('grabbing');
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!dragState) return;
+  const p = uvFromEvent(e);
+  dragState.L.pos = [clamp(p[0] - dragState.ox, -0.2, 1.2), clamp(p[1] - dragState.oy, -0.2, 1.2)];
+  dragState.moved = true;
+  scheduleRender();
+});
+canvas.addEventListener('pointerup', () => {
+  if (dragState && dragState.moved) pushHistory();
+  dragState = null;
+  canvas.classList.remove('grabbing');
+});
+
+// ================= Rotation / canvas size =================
+function applyRotationSize(){
+  if (!baseAsset) return;
+  const r = ((state.transform.rot90 % 4) + 4) % 4;
+  const c = state.transform.crop || { x:0, y:0, w:1, h:1 };
+  const iw = Math.max(1, Math.round(baseAsset.w * c.w));
+  const ih = Math.max(1, Math.round(baseAsset.h * c.h));
+  const w = r % 2 ? ih : iw;
+  const h = r % 2 ? iw : ih;
+  if (canvas.width !== w || canvas.height !== h){
+    canvas.width = w; canvas.height = h;
+    resizeFBOs();
+  }
+  applyZoom();
+  updateExportInfo();
+  renderLayerList();
+}
+
+// ================= Zoom & pan =================
+function currentFactor(){
+  return zoomFactor ?? Math.min(
+    (stageScroll.clientWidth - 64) / canvas.width,
+    (stageScroll.clientHeight - 64) / canvas.height, 1);
+}
+function applyZoom(){
+  if (!baseAsset) return;
+  const f = Math.max(0.02, currentFactor());
+  canvas.style.width = canvas.width * f + 'px';
+  canvas.style.height = canvas.height * f + 'px';
+  $('zoomFitBtn').textContent = Math.round(f * 100) + '%';
+}
+function setZoomFactor(f){ zoomFactor = clamp(f, 0.02, 8); applyZoom(); }
+function fitZoom(){ zoomFactor = null; applyZoom(); }
+ $('zoomInBtn').onclick = () => setZoomFactor(currentFactor() * 1.25);
+ $('zoomOutBtn').onclick = () => setZoomFactor(currentFactor() / 1.25);
+ $('zoomFitBtn').onclick = fitZoom;
+ $('zoom100Btn').onclick = () => setZoomFactor(1);
+new ResizeObserver(() => { if (baseAsset && zoomFactor === null) applyZoom(); }).observe(stageScroll);
+
+stageScroll.addEventListener('wheel', e => {
+  if (!baseAsset) return;
+  e.preventDefault();
+  const sr = stageScroll.getBoundingClientRect();
+  const oldF = currentFactor();
+  const nf = clamp(oldF * (e.deltaY < 0 ? 1.12 : 1 / 1.12), 0.02, 8);
+  zoomFactor = nf;
+  applyZoom();
+  const px = e.clientX - sr.left + stageScroll.scrollLeft;
+  const py = e.clientY - sr.top + stageScroll.scrollTop;
+  const ratio = nf / oldF;
+  stageScroll.scrollLeft = px * ratio - (e.clientX - sr.left);
+  stageScroll.scrollTop  = py * ratio - (e.clientY - sr.top);
+}, { passive:false });
+
+stage.addEventListener('pointerdown', e => {
+  if (!baseAsset) return;
+  if (!(spaceHeld || e.button === 1)) return;
+  e.preventDefault();
+  panDrag = { x:e.clientX, y:e.clientY, sl:stageScroll.scrollLeft, st:stageScroll.scrollTop };
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener('pointermove', e => {
+  if (!panDrag) return;
+  stageScroll.scrollLeft = panDrag.sl - (e.clientX - panDrag.x);
+  stageScroll.scrollTop  = panDrag.st - (e.clientY - panDrag.y);
+});
+const endPan = () => { panDrag = null; };
+stage.addEventListener('pointerup', endPan);
+stage.addEventListener('pointercancel', endPan);
+
+// ================= Compare & split =================
+function startCompare(){ if (!baseAsset || compareOn) return; compareOn = true;
+  stage.classList.add('comparing'); $('compareBtn').classList.add('holding'); render(true); }
+function endCompare(){ if (!compareOn) return; compareOn = false;
+  stage.classList.remove('comparing'); $('compareBtn').classList.remove('holding'); render(); }
+ $('compareBtn').addEventListener('pointerdown', e => { e.preventDefault(); startCompare(); });
+ $('compareBtn').addEventListener('pointerleave', endCompare);
+window.addEventListener('pointerup', endCompare);
+
+function updateSplitLine(){
+  splitLineEl.style.setProperty('--sx', (splitX * 100) + '%');
+}
+function toggleSplit(){
+  if (!baseAsset){ toast('Load an image first', false); return; }
+  splitOn = !splitOn;
+  $('splitBtn').classList.toggle('holding', splitOn);
+  stage.classList.toggle('split-on', splitOn);
+  splitLineEl.classList.toggle('on', splitOn);
+  updateSplitLine();
+  scheduleRender();
+}
+ $('splitBtn').onclick = toggleSplit;
+splitKnob.addEventListener('pointerdown', e => {
+  e.preventDefault(); e.stopPropagation();
+  splitKnob.setPointerCapture(e.pointerId);
+  splitDrag = true;
+});
+splitKnob.addEventListener('pointermove', e => {
+  if (!splitDrag) return;
+  const r = canvas.getBoundingClientRect();
+  splitX = clamp((e.clientX - r.left) / r.width, 0.02, 0.98);
+  updateSplitLine();
+  scheduleRender();
+});
+splitKnob.addEventListener('pointerup', () => { splitDrag = false; });
+splitKnob.addEventListener('pointercancel', () => { splitDrag = false; });
+
+// ================= Image loading =================
+function prepareSource(img){
+  const MAX = 4096;
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (w <= MAX && h <= MAX) return { src:img, w, h };
+  const k = MAX / Math.max(w, h);
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return { src:c, w:c.width, h:c.height };
+}
+
+// Small CPU-side copy of the base image for the color-isolate droplet
+function buildSampleCanvas(src){
+  try {
+    const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+    const k = Math.min(1, 512 / Math.max(sw, sh));
+    sampleW = Math.max(1, Math.round(sw * k));
+    sampleH = Math.max(1, Math.round(sh * k));
+    sampleCanvas.width = sampleW; sampleCanvas.height = sampleH;
+    sampleCtx.drawImage(src, 0, 0, sampleW, sampleH);
+  } catch (e) { sampleW = 0; sampleH = 0; }
+}
+
+function loadBaseImage(prep, name){
+  if (cropMode) exitCrop(false);
+  baseAsset = { ...prep, name };
+  gl.bindTexture(gl.TEXTURE_2D, baseTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, prep.src);
+
+  state.adj = { ...DEFAULT_ADJ };
+  state.transform = TDEF();
+  const L = newCurveLayer();
+  state.curveLayers = [L];
+  activeCurveId = L.id;
+  state.lut = null; state.lutStrength = 100; lutText = null;
+  state.iso = ISO_DEF();
+  computeHistograms(prep.src);
+  buildSampleCanvas(prep.src);
+  setEyedropper(false);
+  layers = [{ id:'base', type:'base',
+    name:(name || 'Base').replace(/\.[^.]+$/, '').slice(0, 28),
+    visible:true, opacity:100, blend:'normal', adj:null }];
+  activeLayerId = 'base';
+  selPt = -1;
+
+  emptyState.style.display = 'none';
+  stageInner.style.display = 'block';
+  docTitle.textContent = name;
+  zoomFactor = null;
+
+  applyRotationSize();
+  buildPresetThumbs();
+  syncUI();
+  scheduleRender();
+  history = []; histIdx = -1; pushHistory();
+  toast('Loaded ' + name);
+}
+
+function loadFile(f){
+  if (!f || !f.type.startsWith('image/')){ toast('Unsupported file', false); return; }
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => loadBaseImage(prepareSource(img), f.name);
+  img.onerror = () => { toast('Could not read image', false); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+ $('fileInput').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+ $('fileInput2').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+ $('layerInput').addEventListener('change', e => { addImageFiles(e.target.files); e.target.value = ''; });
+
+['dragenter', 'dragover'].forEach(ev => stage.addEventListener(ev, e => {
+  e.preventDefault(); dropOverlay.classList.add('show');
+}));
+stage.addEventListener('dragleave', e => {
+  if (!stage.contains(e.relatedTarget)) dropOverlay.classList.remove('show');
+});
+stage.addEventListener('drop', e => {
+  e.preventDefault(); dropOverlay.classList.remove('show');
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+window.addEventListener('paste', e => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items){
+    if (it.type.startsWith('image/')){
+      const f = it.getAsFile();
+      if (f){ loadFile(f); toast('Pasted image loaded'); }
+      e.preventDefault(); break;
+    }
+  }
+});
+
+ $('sampleBtn').onclick = () => {
+  const c = document.createElement('canvas');
+  c.width = 1600; c.height = 1000;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 1000);
+  g.addColorStop(0, '#1b2a4a'); g.addColorStop(.45, '#7a4f6d');
+  g.addColorStop(.72, '#e2795b'); g.addColorStop(1, '#f4b26a');
+  x.fillStyle = g; x.fillRect(0, 0, 1600, 1000);
+  for (let i = 0; i < 90; i++){
+    x.fillStyle = 'rgba(255,255,255,' + (0.15 + Math.random() * 0.5).toFixed(2) + ')';
+    x.fillRect(Math.random() * 1600, Math.random() * 420, 1.6, 1.6);
+  }
+  const rg = x.createRadialGradient(1050, 640, 20, 1050, 640, 300);
+  rg.addColorStop(0, 'rgba(255,214,160,0.55)'); rg.addColorStop(1, 'rgba(255,214,160,0)');
+  x.fillStyle = rg; x.fillRect(700, 300, 700, 660);
+  x.fillStyle = 'rgba(255,224,180,0.95)';
+  x.beginPath(); x.arc(1050, 640, 92, 0, 7); x.fill();
+  const ridge = (pts, col) => {
+    x.fillStyle = col; x.beginPath(); x.moveTo(pts[0][0], pts[0][1]);
+    pts.slice(1).forEach(p => x.lineTo(p[0], p[1]));
+    x.lineTo(1600, 1000); x.lineTo(0, 1000); x.closePath(); x.fill();
+  };
+  ridge([[0,720],[180,640],[360,700],[560,600],[760,680],[980,610],[1200,690],[1400,640],[1600,700]], '#43395c');
+  ridge([[0,800],[220,720],[430,790],[650,700],[870,780],[1120,715],[1350,790],[1600,730]], '#322b49');
+  ridge([[0,900],[260,820],[520,890],[800,810],[1080,880],[1340,830],[1600,895]], '#221e35');
+  const img = new Image();
+  img.onload = () => loadBaseImage(prepareSource(img), 'sample-dusk.png');
+  img.src = c.toDataURL('image/png');
+};
+
+// ================= Panel switching =================
+function switchPanel(key){
+  document.querySelectorAll('.rail-btn').forEach(b => b.classList.toggle('active', b.dataset.panel === key));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'panel-' + key));
+  panelTitle.textContent = PANELS[key][0];
+  panelSub.textContent = PANELS[key][1];
+  // Layers is locked behind a work-in-progress overlay
+  const lockLayers = key === 'layers';
+  panelLock.classList.toggle('show', lockLayers);
+  panelBody.classList.toggle('locked', lockLayers);
+  if (key === 'curves') requestAnimationFrame(() => { drawCurveEditor(); updateCurveInfo(); });
+}
+document.querySelectorAll('.rail-btn').forEach(b =>
+  b.addEventListener('click', () => switchPanel(b.dataset.panel)));
+
+// ================= Adjust tab =================
+const adjInputs = {};
+(function buildAdjustUI(){
+  const host = $('adjustSections');
+  ADJ_CONFIG.forEach(group => {
+    const sec = document.createElement('div');
+    sec.className = 'section';
+    sec.innerHTML = `<div class="section-label">${group.section}</div>`;
+    group.items.forEach(([key, label, min, max, step]) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<label>${label}</label>
+        <input type="range" min="${min}" max="${max}" step="${step}" value="${DEFAULT_ADJ[key]}">
+        <span class="val">${DEFAULT_ADJ[key]}</span>`;
+      const range = row.querySelector('input');
+      const val = row.querySelector('.val');
+      range.addEventListener('input', () => {
+        state.adj[key] = +range.value;
+        val.textContent = range.value;
+        clearPresetActive();
+        scheduleRender();
+      });
+      range.addEventListener('change', pushHistory);
+      adjInputs[key] = { range, val };
+      sec.appendChild(row);
+    });
+    host.appendChild(sec);
+  });
+})();
+
+function syncAdjustUI(){
+  for (const k in adjInputs){
+    adjInputs[k].range.value = state.adj[k];
+    adjInputs[k].val.textContent = state.adj[k];
+  }
+}
+ $('resetAdjBtn').onclick = () => {
+  if (!baseAsset) return;
+  state.adj = { ...DEFAULT_ADJ };
+  clearPresetActive(); syncAdjustUI(); scheduleRender(); pushHistory();
+  toast('Adjustments reset');
+};
+
+// ================= Presets =================
+const presetBtns = [];
+function clearPresetActive(){ presetBtns.forEach(b => b.classList.remove('active')); }
+
+(function buildPresets(){
+  const grid = $('presetGrid');
+  PRESETS.forEach((p, idx) => {
+    const b = document.createElement('button');
+    b.className = 'preset' + (idx === 0 ? ' active' : '');
+    const c = document.createElement('canvas');
+    c.width = 96; c.height = 60;
+    const lbl = document.createElement('span');
+    lbl.textContent = p[0];
+    b.append(c, lbl);
+    b.onclick = () => {
+      if (!baseAsset) return;
+      state.adj = { ...DEFAULT_ADJ, ...p[1] };
+      presetBtns.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      syncAdjustUI(); scheduleRender(); pushHistory();
+    };
+    grid.appendChild(b);
+    presetBtns.push(b);
+  });
+})();
+
+function presetCssFilter(p){
+  const g = k => (p[k] !== undefined ? p[k] : DEFAULT_ADJ[k]);
+  const f = [];
+  const br = g('brightness') / 100 * Math.pow(2, g('exposure') / 150);
+  f.push(`brightness(${br.toFixed(3)})`);
+  f.push(`contrast(${(g('contrast') / 100).toFixed(3)})`);
+  f.push(`saturate(${(g('saturation') / 100).toFixed(3)})`);
+  if (g('hue')) f.push(`hue-rotate(${g('hue')}deg)`);
+  if (g('temperature') > 0) f.push(`sepia(${Math.min(0.6, g('temperature') / 180).toFixed(3)})`);
+  if (g('temperature') < 0) f.push(`hue-rotate(${(g('temperature') / 6).toFixed(1)}deg)`);
+  return f.join(' ');
+}
+function buildPresetThumbs(){
+  if (!baseAsset) return;
+  presetBtns.forEach((b, idx) => {
+    const c = b.querySelector('canvas');
+    const x = c.getContext('2d');
+    x.clearRect(0, 0, c.width, c.height);
+    try { x.filter = presetCssFilter(PRESETS[idx][1]); } catch (e) {}
+    const src = baseAsset.src;
+    const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+    const k = Math.max(c.width / sw, c.height / sh);
+    x.drawImage(src, (c.width - sw * k) / 2, (c.height - sh * k) / 2, sw * k, sh * k);
+    x.filter = 'none';
+  });
+}
+
+// ================= LUT =================
+function uploadLutTexture(parsed){
+  const { data, size } = parsed;
+  lutSize = size;
+  const atlas = new Uint8Array(size * size * size * 4);
+  for (let bb = 0; bb < size; bb++)
+    for (let gg = 0; gg < size; gg++)
+      for (let rr = 0; rr < size; rr++){
+        const si = (rr + gg * size + bb * size * size) * 3;
+        const di = (gg * size * size + rr + bb * size) * 4;
+        atlas[di] = Math.round(data[si] * 255);
+        atlas[di + 1] = Math.round(data[si + 1] * 255);
+        atlas[di + 2] = Math.round(data[si + 2] * 255);
+        atlas[di + 3] = 255;
+      }
+  gl.bindTexture(gl.TEXTURE_2D, lutTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size * size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
+}
+ $('lutInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    lutText = ev.target.result;
+    const parsed = parseCubeLut(lutText);
+    if (!parsed){ lutText = null; toast('Invalid .cube file', false); return; }
+    uploadLutTexture(parsed);
+    state.lut = { name:file.name };
+    $('lutStrength').disabled = false;
+    renderLutChip();
+    scheduleRender(); pushHistory();
+    toast('LUT loaded: ' + file.name);
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+function parseCubeLut(text){
+  const lines = text.split('\n');
+  let size = 0;
+  const data = [];
+  for (let line of lines){
+    line = line.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.toUpperCase().startsWith('LUT_3D_SIZE')){ size = parseInt(line.split(/\s+/)[1]); continue; }
+    if (/^(TITLE|DOMAIN_MIN|DOMAIN_MAX|LUT_1D_SIZE)/i.test(line)) continue;
+    const parts = line.split(/\s+/).map(Number);
+    if (parts.length >= 3 && !isNaN(parts[0])) data.push(parts[0], parts[1], parts[2]);
+  }
+  if (!size || data.length !== size * size * size * 3) return null;
+  return { data, size };
+}
+function renderLutChip(){
+  const host = $('lutChip');
+  if (!state.lut){ host.innerHTML = ''; $('lutStrength').disabled = true; return; }
+  host.innerHTML = `<div class="lut-preview">
+      <div class="lut-swatch"></div>
+      <span class="lut-name">${state.lut.name}</span>
+      <button class="lut-remove" title="Remove LUT">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button></div>`;
+  host.querySelector('.lut-remove').onclick = () => {
+    state.lut = null; lutText = null; renderLutChip(); scheduleRender(); pushHistory();
+  };
+}
+ $('lutStrength').addEventListener('input', e => {
+  state.lutStrength = +e.target.value;
+  $('lutStrengthVal').textContent = e.target.value;
+  scheduleRender();
+});
+ $('lutStrength').addEventListener('change', pushHistory);
+
+// ================= Color isolate (droplet workflow) =================
+function syncIsolateUI(){
+  $('isoSwatch').style.background = state.iso.color;
+  $('isoHex').textContent = state.iso.color;
+  const onBtn = $('isoOnBtn');
+  onBtn.textContent = state.iso.on ? 'On' : 'Off';
+  onBtn.classList.toggle('pressed', state.iso.on);
+  $('isoRange').value = state.iso.range; $('isoRangeVal').textContent = state.iso.range;
+  $('isoFeather').value = state.iso.feather; $('isoFeatherVal').textContent = state.iso.feather;
+}
+ $('isoOnBtn').onclick = () => {
+  if (!baseAsset){ toast('Load an image first', false); return; }
+  state.iso.on = !state.iso.on;
+  syncIsolateUI();
+  scheduleRender(); pushHistory();
+  toast(state.iso.on ? 'Colour isolate on: ' + state.iso.color : 'Colour isolate off');
+};
+ $('isoRange').addEventListener('input', e => {
+  state.iso.range = +e.target.value;
+  $('isoRangeVal').textContent = e.target.value;
+  scheduleRender();
+});
+ $('isoRange').addEventListener('change', pushHistory);
+ $('isoFeather').addEventListener('input', e => {
+  state.iso.feather = +e.target.value;
+  $('isoFeatherVal').textContent = e.target.value;
+  scheduleRender();
+});
+ $('isoFeather').addEventListener('change', pushHistory);
+
+function setEyedropper(on){
+  eyedropperOn = on;
+  $('isoPickBtn').classList.toggle('pressed', on);
+  canvas.classList.toggle('picking', on);
+}
+ $('isoPickBtn').onclick = () => {
+  if (!baseAsset){ toast('Load an image first', false); return; }
+  setEyedropper(!eyedropperOn);
+  if (eyedropperOn) toast('Click the colour you want to keep');
+};
+function pickColorFromCanvas(e){
+  if (!sampleW || !sampleH) return;
+  const r = canvas.getBoundingClientRect();
+  const pt = { x: clamp((e.clientX - r.left) / r.width, 0, 1),
+               y: clamp((e.clientY - r.top) / r.height, 0, 1) };
+  const img = displayToImgUV(pt);
+  const x = clamp(Math.floor(img.x * sampleW), 0, sampleW - 1);
+  const y = clamp(Math.floor(img.y * sampleH), 0, sampleH - 1);
+  let d;
+  try { d = sampleCtx.getImageData(x, y, 1, 1).data; }
+  catch (err) { toast('Could not sample that pixel', false); return; }
+  const hex = '#' + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  state.iso.color = hex;
+  state.iso.on = true;   // picking a colour switches the effect on
+  setEyedropper(false);
+  syncIsolateUI();
+  scheduleRender(); pushHistory();
+  toast('Colour isolate on: ' + hex);
+}
+
+// ================= Transform controls =================
+ $('rotLeftBtn').onclick = () => { state.transform.rot90 = (state.transform.rot90 + 3) % 4; applyRotationSize(); scheduleRender(); pushHistory(); };
+ $('rotRightBtn').onclick = () => { state.transform.rot90 = (state.transform.rot90 + 1) % 4; applyRotationSize(); scheduleRender(); pushHistory(); };
+ $('flipHBtn').onclick = () => { state.transform.flipH = !state.transform.flipH; $('flipHBtn').classList.toggle('pressed', state.transform.flipH); scheduleRender(); pushHistory(); };
+ $('flipVBtn').onclick = () => { state.transform.flipV = !state.transform.flipV; $('flipVBtn').classList.toggle('pressed', state.transform.flipV); scheduleRender(); pushHistory(); };
+ $('angle').addEventListener('input', e => { state.transform.angle = +e.target.value; $('angleVal').textContent = e.target.value + '°'; scheduleRender(); });
+ $('angle').addEventListener('change', pushHistory);
+ $('cropZoom').addEventListener('input', e => { state.transform.cropZoom = +e.target.value; $('cropZoomVal').textContent = e.target.value + '%'; scheduleRender(); });
+ $('cropZoom').addEventListener('change', pushHistory);
+ $('cropAnchor').addEventListener('change', e => { state.transform.anchor = e.target.value; scheduleRender(); pushHistory(); });
+ $('resetTransformBtn').onclick = () => {
+  if (cropMode) exitCrop(false);
+  state.transform = TDEF();
+  $('angle').value = 0; $('angleVal').textContent = '0°';
+  $('cropZoom').value = 0; $('cropZoomVal').textContent = '0%';
+  $('cropAnchor').value = 'center';
+  $('flipHBtn').classList.remove('pressed'); $('flipVBtn').classList.remove('pressed');
+  applyRotationSize(); scheduleRender(); pushHistory();
+  toast('Transform reset');
+};
+
+// ================= Full reset (footer) =================
+function resetEverything(){
+  if (!baseAsset){ toast('Load an image first', false); return; }
+  if (cropMode) exitCrop(false);
+  setEyedropper(false);
+
+  // Color
+  state.adj = { ...DEFAULT_ADJ };
+  const CL0 = newCurveLayer();
+  state.curveLayers = [CL0];
+  activeCurveId = CL0.id;
+  state.lut = null; state.lutStrength = 100; lutText = null;
+  state.iso = ISO_DEF();
+
+  // Transform
+  state.transform = TDEF();
+
+  // Layers: keep the assets map intact so undo can restore added layers
+  layers = [{ id:'base', type:'base',
+    name: baseAsset.name ? baseAsset.name.replace(/\.[^.]+$/, '').slice(0, 28) : 'Base',
+    visible:true, opacity:100, blend:'normal', adj:null }];
+  activeLayerId = 'base';
+  selPt = -1;
+
+  presetBtns.forEach(x => x.classList.remove('active'));
+  if (presetBtns[0]) presetBtns[0].classList.add('active');
+
+  applyRotationSize();
+  syncUI();
+  scheduleRender();
+  pushHistory();
+  toast('Image fully reset. Ctrl+Z to undo');
+}
+
+// ================= Crop tool =================
+function overlayUV(e){
+  const r = cropOverlay.getBoundingClientRect();
+  return { x: clamp((e.clientX - r.left) / r.width, 0, 1),
+           y: clamp((e.clientY - r.top) / r.height, 0, 1) };
+}
+// display point -> original image UV, mirroring the shader's transform chain
+// (flips, 90° rotation, fine angle + auto-zoom, zoom-crop window, crop rect)
+function displayToImgUV(pt){
+  const T = state.transform;
+  let ux = pt.x, uy = 1 - pt.y;                       // canvas v_uv (y-up)
+  if (T.flipH) ux = 1 - ux;
+  if (T.flipV) uy = 1 - uy;
+  const k = ((T.rot90 % 4) + 4) % 4;
+  if (k === 1)      { const t = ux; ux = 1 - uy; uy = t; }
+  else if (k === 2) { ux = 1 - ux; uy = 1 - uy; }
+  else if (k === 3) { const t = ux; ux = uy; uy = 1 - t; }
+  if (Math.abs(T.angle) > 0.0005){
+    const A = canvas.width / canvas.height;
+    const sc = autoRotateScale(T.angle, A);
+    const th = T.angle * Math.PI / 180;
+    const c = Math.cos(th), sn = Math.sin(th);
+    const px = (ux - 0.5) * A, py = uy - 0.5;
+    const rx = px * c - py * sn, ry = px * sn + py * c;
+    ux = (rx / sc) / A + 0.5;
+    uy = (ry / sc) + 0.5;
+  }
+  const [uvMin, uvMax] = computeCrop(T);
+  const cssx = uvMin[0] + (uvMax[0] - uvMin[0]) * ux;
+  const cssy = uvMin[1] + (uvMax[1] - uvMin[1]) * (1 - uy);
+  const c = T.crop || { x:0, y:0, w:1, h:1 };
+  return { x: c.x + cssx * c.w, y: c.y + cssy * c.h };
+}
+
+const CROP_MIN = 0.03;
+function resizeRect(start, handle, pt){
+  let { x, y, w, h } = start;
+  let x2 = x + w, y2 = y + h;
+  if (handle.includes('w')) x = Math.min(pt.x, x2 - CROP_MIN);
+  if (handle.includes('e')) x2 = Math.max(pt.x, x + CROP_MIN);
+  if (handle.includes('n')) y = Math.min(pt.y, y2 - CROP_MIN);
+  if (handle.includes('s')) y2 = Math.max(pt.y, y + CROP_MIN);
+  return { x, y, w: x2 - x, h: y2 - y };
+}
+function fitAspectRect(r, handle){
+  if (!cropAspect) return r;
+  const cw = canvas.clientWidth || 1, ch = canvas.clientHeight || 1;
+  const conv = cw / (ch * cropAspect);
+  const hN = handle.includes('n'), hS = handle.includes('s'), hW = handle.includes('w');
+  let { x, y, w } = r;
+  const right = x + r.w, cx = x + r.w / 2;
+  let h = w * conv;
+  if (hS) { }
+  else if (hN) y = (r.y + r.h) - h;
+  else y = r.y + r.h / 2 - h / 2;
+  if (y < 0){ y = 0; h = hS ? (r.y + r.h) : h; w = h / conv; if (hW) x = right - w; else x = cx - w / 2; }
+  if (y + h > 1){ h = 1 - y; w = h / conv; if (hW) x = right - w; else x = cx - w / 2; }
+  return { x, y, w, h };
+}
+function renderCropOverlay(){
+  const r = cropRect;
+  cropRectEl.style.left = (r.x * 100) + '%';
+  cropRectEl.style.top = (r.y * 100) + '%';
+  cropRectEl.style.width = (r.w * 100) + '%';
+  cropRectEl.style.height = (r.h * 100) + '%';
+  $('cropDims').textContent = cropMode
+    ? `${Math.round(r.w * canvas.clientWidth)} × ${Math.round(r.h * canvas.clientHeight)} px`
+    : '';
+}
+
+function enterCrop(){
+  if (!baseAsset || cropMode) return;
+  cropMode = true;
+  savedAngle = state.transform.angle;
+  state.transform.angle = 0;
+  $('angle').disabled = true;
+  cropRect = { x:0.1, y:0.1, w:0.8, h:0.8 };
+  if (cropAspect) cropRect = fitAspectRect(cropRect, 'se');
+  cropOverlay.classList.add('on');
+  $('cropStartBtn').style.display = 'none';
+  $('cropActions').style.display = 'flex';
+  renderCropOverlay();
+  scheduleRender();
+  toast('Crop mode: drag on the image');
+}
+function exitCrop(keep){
+  cropMode = false; cropSession = null;
+  cropOverlay.classList.remove('on');
+  state.transform.angle = savedAngle;
+  $('angle').disabled = false;
+  $('angle').value = state.transform.angle;
+  $('angleVal').textContent = state.transform.angle + '°';
+  $('cropStartBtn').style.display = '';
+  $('cropActions').style.display = 'none';
+  $('cropDims').textContent = '';
+  scheduleRender();
+  if (!keep) toast('Crop cancelled');
+}
+function applyCrop(){
+  const p1 = displayToImgUV({ x: cropRect.x, y: cropRect.y });
+  const p2 = displayToImgUV({ x: cropRect.x + cropRect.w, y: cropRect.y + cropRect.h });
+  const c = { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y),
+              w: Math.abs(p2.x - p1.x), h: Math.abs(p2.y - p1.y) };
+  if (c.w < 0.01 || c.h < 0.01){ toast('Crop is too small', false); return; }
+  state.transform.crop = c;
+  state.transform.cropZoom = 0;
+  state.transform.anchor = 'none';
+  $('cropZoom').value = 0; $('cropZoomVal').textContent = '0%';
+  $('cropAnchor').value = 'none';
+  exitCrop(true);
+  applyRotationSize();
+  scheduleRender(); pushHistory();
+  toast(`Cropped to ${canvas.width} × ${canvas.height}`);
+}
+ $('cropStartBtn').onclick = enterCrop;
+ $('cropApplyBtn').onclick = applyCrop;
+ $('cropCancelBtn').onclick = () => exitCrop(false);
+
+cropOverlay.addEventListener('pointerdown', e => {
+  if (!baseAsset || !cropMode) return;
+  e.preventDefault(); e.stopPropagation();
+  const pt = overlayUV(e);
+  const h = e.target.dataset && e.target.dataset.h;
+  const inside = pt.x >= cropRect.x && pt.x <= cropRect.x + cropRect.w &&
+                 pt.y >= cropRect.y && pt.y <= cropRect.y + cropRect.h;
+  if (h){
+    cropSession = { mode:'resize', handle:h, startPt:pt, startRect:{ ...cropRect } };
+  } else if (inside){
+    cropSession = { mode:'move', startPt:pt, startRect:{ ...cropRect } };
+  } else {
+    cropRect = { x:pt.x, y:pt.y, w:0, h:0 };
+    cropSession = { mode:'new', startPt:pt };
+  }
+  cropOverlay.setPointerCapture(e.pointerId);
+  renderCropOverlay();
+});
+cropOverlay.addEventListener('pointermove', e => {
+  if (!cropSession) return;
+  const pt = overlayUV(e);
+  const s = cropSession;
+  if (s.mode === 'move'){
+    cropRect = {
+      x: clamp(s.startRect.x + (pt.x - s.startPt.x), 0, 1 - s.startRect.w),
+      y: clamp(s.startRect.y + (pt.y - s.startPt.y), 0, 1 - s.startRect.h),
+      w: s.startRect.w, h: s.startRect.h,
+    };
+  } else if (s.mode === 'new'){
+    let r = { x: Math.min(s.startPt.x, pt.x), y: Math.min(s.startPt.y, pt.y),
+              w: Math.abs(pt.x - s.startPt.x), h: Math.abs(pt.y - s.startPt.y) };
+    r = fitAspectRect(r, 'se');
+    cropRect = r;
+  } else {
+    let r = resizeRect(s.startRect, s.handle, pt);
+    r = fitAspectRect(r, s.handle);
+    cropRect = r;
+  }
+  renderCropOverlay();
+});
+const endCropSession = () => { cropSession = null; };
+cropOverlay.addEventListener('pointerup', endCropSession);
+cropOverlay.addEventListener('pointercancel', endCropSession);
+
+document.querySelectorAll('#aspectChips .mini-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#aspectChips .mini-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    cropAspect = b.dataset.ar === 'free' ? null : parseFloat(b.dataset.ar);
+    if (cropMode && cropRect.w > 0){
+      cropRect = fitAspectRect(cropRect, 'se');
+      renderCropOverlay();
+    }
+  });
+});
+
+// ================= Curve editor =================
+const cvEd = $('curveCanvas');
+const CPAD = 12;
+let curveChannel = 'rgb';
+let curveDrag = -1, dragMoved = false, downX = 0, downY = 0, grabOX = 0, grabOY = 0, curveDirty = false;
+
+function curvePos(e){
+  const r = cvEd.getBoundingClientRect();
+  return {
+    x: clamp((e.clientX - r.left - CPAD) / (r.width - 2 * CPAD), 0, 1),
+    y: clamp(1 - (e.clientY - r.top - CPAD) / (r.height - 2 * CPAD), 0, 1),
+  };
+}
+function hitCurvePoint(e){
+  const r = cvEd.getBoundingClientRect();
+  const L = CL(); if (!L) return -1;
+  const pts = L.curves[curveChannel];
+  let idx = -1, best = 12;
+  for (let i = 0; i < pts.length; i++){
+    const px = CPAD + pts[i].x * (r.width - 2 * CPAD);
+    const py = (r.height - CPAD) - pts[i].y * (r.height - 2 * CPAD);
+    const d = Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py);
+    if (d <= best){ best = d; idx = i; }
+  }
+  return idx;
+}
+function drawHistCurve(ctx, hist, color, w, h, pad){
+  if (!HIST || !HIST.total) return;
+  const sm = new Float32Array(256);
+  for (let i = 0; i < 256; i++)
+    sm[i] = (hist[Math.max(0, i-1)] + 2*hist[i] + hist[Math.min(255, i+1)]) / 4;
+  const nz = Array.from(sm).filter(v => v > 0).sort((a, b) => a - b);
+  const cap = nz.length ? nz[Math.floor(nz.length * 0.995)] : 1;
+  ctx.beginPath(); ctx.moveTo(pad, h - pad);
+  for (let i = 0; i < 256; i++){
+    const v = Math.min(sm[i], cap) / cap;
+    ctx.lineTo(pad + (i / 255) * (w - 2*pad), (h - pad) - v * (h - 2*pad) * 0.9);
+  }
+  ctx.lineTo(w - pad, h - pad); ctx.closePath();
+  ctx.globalAlpha = 0.26; ctx.fillStyle = color; ctx.fill();
+  ctx.globalAlpha = 0.55; ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+function drawCurveEditor(){
+  const L = CL();
+  const cw = cvEd.clientWidth;
+  if (!cw) return;
+  if (!cvEd.clientHeight || Math.abs(cvEd.clientHeight - cw) > 1){
+    cvEd.style.height = cw + 'px';
+  }
+  const chh = cvEd.clientHeight;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.round(cw * dpr), H = Math.round(chh * dpr);
+  if (cvEd.width !== W || cvEd.height !== H){ cvEd.width = W; cvEd.height = H; }
+  const ctx = cvEd.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = cw, h = chh, pad = CPAD;
+  const col = CHAN_COLORS[curveChannel];
+
+  ctx.fillStyle = '#0c0c0f'; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++){
+    const p = pad + (i/4) * (w - 2*pad), q = pad + (i/4) * (h - 2*pad);
+    ctx.beginPath(); ctx.moveTo(p, pad); ctx.lineTo(p, h - pad); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad, q); ctx.lineTo(w - pad, q); ctx.stroke();
+  }
+  drawHistCurve(ctx, curveChannel === 'rgb' ? (HIST ? HIST.l : null) : (HIST ? HIST[curveChannel] : null), col, w, h, pad);
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(pad, h - pad); ctx.lineTo(w - pad, pad); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeRect(pad + 0.5, pad + 0.5, w - 2*pad - 1, h - 2*pad - 1);
+
+  if (L){
+    if (curveChannel !== 'rgb' && state.curveLayers.some(x => x.on)){
+      const comp = composedLUT[curveChannel];
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.25; ctx.beginPath();
+      for (let i = 0; i <= 255; i++){
+        const t = i / 255, v = comp[i];
+        const x = pad + t * (w - 2*pad), y = (h - pad) - v * (h - 2*pad);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    }
+    const lut = curveLUT(L.curves[curveChannel]);
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+    for (let i = 0; i <= 255; i++){
+      const t = i / 255, v = lut[i];
+      const x = pad + t * (w - 2*pad), y = (h - pad) - v * (h - 2*pad);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+    L.curves[curveChannel].forEach((p, i) => {
+      const x = pad + p.x * (w - 2*pad), y = (h - pad) - p.y * (h - 2*pad);
+      ctx.beginPath(); ctx.arc(x, y, i === curveDrag ? 5.5 : 4.5, 0, 7);
+      ctx.fillStyle = (i === curveDrag || i === selPt) ? col : '#16161a';
+      ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.stroke();
+    });
+  }
+}
+function updateCurveInfo(){
+  const L = CL();
+  const pts = L ? L.curves[curveChannel] : [];
+  let s = `${L ? L.name : '—'} · ${CHAN_NAMES[curveChannel]} · ${pts.length} point${pts.length === 1 ? '' : 's'}`;
+  if (curveDrag >= 0 && pts[curveDrag])
+    s += ` · in ${Math.round(pts[curveDrag].x * 255)} → out ${Math.round(pts[curveDrag].y * 255)}`;
+  $('curveInfo').textContent = s;
+}
+cvEd.addEventListener('pointerdown', e => {
+  if (!baseAsset || !CL()) return;
+  e.preventDefault();
+  const p = curvePos(e);
+  downX = e.clientX; downY = e.clientY;
+  dragMoved = false;
+  const pts = CL().curves[curveChannel];
+  let idx = hitCurvePoint(e);
+  if (idx >= 0){
+    grabOX = p.x - pts[idx].x;
+    grabOY = p.y - pts[idx].y;
+  } else {
+    if (pts.length >= 10){ toast('Max 10 points per curve', false); return; }
+    const np = { x: p.x, y: p.y };
+    idx = pts.findIndex(q => q.x > np.x);
+    if (idx < 0) idx = pts.length;
+    pts.splice(idx, 0, np);
+    grabOX = 0; grabOY = 0;
+    updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender();
+  }
+  curveDrag = idx;
+  selPt = idx;
+  cvEd.setPointerCapture(e.pointerId);
+});
+cvEd.addEventListener('pointermove', e => {
+  if (curveDrag < 0) return;
+  if (!dragMoved){
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) < 3) return;
+    dragMoved = true;
+  }
+  const L = CL(); if (!L) return;
+  const pts = L.curves[curveChannel];
+  const i = curveDrag, p = curvePos(e);
+  const first = i === 0, last = i === pts.length - 1;
+  pts[i].y = clamp(p.y - grabOY, 0, 1);
+  if (!first && !last){
+    const minX = pts[i-1].x + 0.004, maxX = pts[i+1].x - 0.004;
+    pts[i].x = clamp(p.x - grabOX, minX, maxX);
+  }
+  curveDirty = true;
+  updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender();
+});
+function endCurveDrag(){
+  if (curveDrag >= 0 && dragMoved && curveDirty) pushHistory();
+  curveDrag = -1; dragMoved = false; curveDirty = false;
+  drawCurveEditor(); updateCurveInfo();
+}
+cvEd.addEventListener('pointerup', endCurveDrag);
+cvEd.addEventListener('pointercancel', endCurveDrag);
+cvEd.addEventListener('dblclick', e => {
+  const L = CL();
+  if (!L || !baseAsset) return;
+  const r = cvEd.getBoundingClientRect();
+  const pts = L.curves[curveChannel];
+  for (let i = 0; i < pts.length; i++){
+    const px = CPAD + pts[i].x * (r.width - 2*CPAD);
+    const py = (r.height - CPAD) - pts[i].y * (r.height - 2*CPAD);
+    if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < 12){
+      if (i === 0 || i === pts.length - 1){ toast('Endpoints can\u2019t be removed'); return; }
+      pts.splice(i, 1);
+      curveDrag = -1; selPt = -1;
+      updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+      return;
+    }
+  }
+});
+new ResizeObserver(() => drawCurveEditor()).observe(cvEd);
+
+document.querySelectorAll('#curveChanSeg .seg-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#curveChanSeg .seg-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    curveChannel = b.dataset.chan;
+    curveDrag = -1; selPt = -1;
+    drawCurveEditor(); updateCurveInfo();
+  });
+});
+
+function renderCurveList(){
+  const host = $('curveList');
+  host.innerHTML = '';
+  state.curveLayers.forEach(L => {
+    const row = document.createElement('div');
+    row.className = 'cv-row' + (L.id === activeCurveId ? ' active' : '') + (L.on ? '' : ' off');
+    row.draggable = true;
+    row.dataset.id = L.id;
+
+    const tg = document.createElement('button');
+    tg.className = 'cv-tg';
+    tg.innerHTML = L.on ? EYE_SVG : EYE_OFF_SVG;
+    tg.title = L.on ? 'Bypass this curve layer' : 'Enable this curve layer';
+    tg.onclick = e => {
+      e.stopPropagation();
+      L.on = !L.on;
+      updateCurveTexture(); renderCurveList(); drawCurveEditor(); scheduleRender(); pushHistory();
+    };
+
+    const nm = document.createElement('div');
+    nm.className = 'cv-name';
+    nm.textContent = L.name;
+    nm.title = 'Double-click to rename';
+    nm.ondblclick = e => {
+      e.stopPropagation();
+      nm.contentEditable = 'true';
+      nm.focus();
+      const r = document.createRange(); r.selectNodeContents(nm);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    };
+    nm.onblur = () => {
+      nm.contentEditable = 'false';
+      const v = nm.textContent.trim();
+      if (v && v !== L.name){ L.name = v; pushHistory(); }
+      renderCurveList();
+    };
+    nm.onkeydown = e => {
+      if (e.key === 'Enter'){ e.preventDefault(); nm.blur(); }
+      if (e.key === 'Escape'){ nm.textContent = L.name; nm.blur(); }
+    };
+
+    const del = document.createElement('button');
+    del.className = 'cv-del';
+    del.textContent = '×';
+    del.title = 'Delete curve layer';
+    del.disabled = state.curveLayers.length <= 1;
+    del.onclick = e => {
+      e.stopPropagation();
+      if (state.curveLayers.length <= 1) return;
+      state.curveLayers = state.curveLayers.filter(x => x.id !== L.id);
+      if (activeCurveId === L.id) activeCurveId = state.curveLayers[0].id;
+      curveDrag = -1; selPt = -1;
+      updateCurveTexture(); renderCurveList(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+      toast('Curve layer deleted');
+    };
+
+    row.append(tg, nm, del);
+    row.onclick = () => {
+      activeCurveId = L.id;
+      curveDrag = -1; selPt = -1;
+      renderCurveList(); drawCurveEditor(); updateCurveInfo();
+    };
+    host.appendChild(row);
+  });
+}
+ $('addCurveBtn').onclick = () => {
+  const L = newCurveLayer();
+  state.curveLayers.push(L);
+  activeCurveId = L.id;
+  curveDrag = -1; selPt = -1;
+  renderCurveList(); drawCurveEditor(); updateCurveInfo(); pushHistory();
+  toast('Curve layer added');
+};
+
+const CURVE_PRESETS = {
+  soft:  [{x:0,y:0},{x:0.25,y:0.21},{x:0.75,y:0.79},{x:1,y:1}],
+  punch: [{x:0,y:0},{x:0.2,y:0.12},{x:0.8,y:0.88},{x:1,y:1}],
+  fade:  [{x:0,y:0.07},{x:0.22,y:0.27},{x:0.85,y:0.92},{x:1,y:1}],
+};
+document.querySelectorAll('#curvePresets .mini-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    if (!baseAsset){ toast('Load an image first', false); return; }
+    const L = CL(); if (!L) return;
+    const which = b.dataset.preset;
+    if (which === 'reset'){
+      L.curves = defaultCurves();
+      toast(L.name + ' reset');
+    } else if (which === 'invert'){
+      ['rgb','r','g','b'].forEach(k => L.curves[k] = [{x:0,y:1},{x:1,y:0}]);
+      toast('Inverted: ' + L.name);
+    } else {
+      L.curves[curveChannel] = CURVE_PRESETS[which].map(p => ({ ...p }));
+      toast(which + ' curve applied to ' + L.name + ' · ' + CHAN_NAMES[curveChannel]);
+    }
+    updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+  });
+});
+ $('resetCurvesBtn').onclick = () => {
+  if (!baseAsset) return;
+  const L = CL(); if (!L) return;
+  L.curves = defaultCurves();
+  updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+  toast(L.name + ' reset');
+};
+
+// ================= Enhance =================
+function autoContrast(){
+  const L = CL();
+  if (!baseAsset || !HIST || !L){ toast('Load an image first', false); return; }
+  const lo = histPercentile(HIST.l, 0.001), hi = histPercentile(HIST.l, 0.999);
+  if (hi - lo < 0.02){ toast('Image already spans the full tonal range'); return; }
+  L.curves.rgb = [{x:lo, y:0}, {x:hi, y:1}];
+  updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+  toast('Auto Contrast applied to ' + L.name);
+}
+function autoTone(){
+  const L = CL();
+  if (!baseAsset || !HIST || !L){ toast('Load an image first', false); return; }
+  let changed = false;
+  [['r', HIST.r], ['g', HIST.g], ['b', HIST.b]].forEach(([k, h]) => {
+    const lo = histPercentile(h, 0.001), hi = histPercentile(h, 0.999);
+    if (hi - lo > 0.02){ L.curves[k] = [{x:lo, y:0}, {x:hi, y:1}]; changed = true; }
+  });
+  if (!changed){ toast('Channels already span the full range'); return; }
+  updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+  toast('Auto Tone applied to ' + L.name);
+}
+function autoColor(){
+  const L = CL();
+  if (!baseAsset || !HIST || !L){ toast('Load an image first', false); return; }
+  const target = clamp(histMean(HIST.l), 0.06, 0.94);
+  [['r', HIST.r], ['g', HIST.g], ['b', HIST.b]].forEach(([k, h]) => {
+    const lo = histPercentile(h, 0.001), hi = histPercentile(h, 0.999);
+    const m = clamp(histMean(h), 0.03, 0.97);
+    L.curves[k] = [
+      {x:Math.min(lo, m * 0.9), y:0},
+      {x:m, y:target},
+      {x:Math.max(hi, m + (1 - m) * 0.1), y:1},
+    ];
+  });
+  updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+  toast('Auto Color applied to ' + L.name);
+}
+function autoEnhance(){
+  const L = CL();
+  if (!baseAsset || !HIST || !L){ toast('Load an image first', false); return; }
+  [['r', HIST.r], ['g', HIST.g], ['b', HIST.b]].forEach(([k, h]) => {
+    const lo = histPercentile(h, 0.002), hi = histPercentile(h, 0.998);
+    if (hi - lo > 0.04) L.curves[k] = [{x:lo, y:0}, {x:hi, y:1}];
+  });
+  L.curves.rgb = [{x:0, y:0}, {x:0.25, y:0.22}, {x:0.75, y:0.80}, {x:1, y:1}];
+  state.adj.vibrance = clamp(state.adj.vibrance + 22, 0, 100);
+  state.adj.sharpen  = clamp(state.adj.sharpen + 15, 0, 100);
+  state.adj.shadows  = clamp(state.adj.shadows + 6, -100, 100);
+  clearPresetActive();
+  syncAdjustUI();
+  updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+  toast('Auto enhanced. Tweak sliders or curves to taste');
+}
+ $('autoEnhanceBtn').onclick  = autoEnhance;
+ $('autoToneBtn').onclick     = autoTone;
+ $('autoContrastBtn').onclick = autoContrast;
+ $('autoColorBtn').onclick    = autoColor;
+ $('autoResetBtn').onclick    = () => {
+  if (!baseAsset) return;
+  state.adj = { ...DEFAULT_ADJ };
+  const L = newCurveLayer();
+  state.curveLayers = [L];
+  activeCurveId = L.id;
+  clearPresetActive(); syncAdjustUI();
+  updateCurveTexture(); renderCurveList(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+  toast('Adjustments & curves reset');
+};
+
+// ================= Per-layer adjustments =================
+[['la_b','b'],['la_c','c'],['la_s','s'],['la_t','t']].forEach(([id, k]) => {
+  $(id).addEventListener('input', e => {
+    const L = activeLayer();
+    if (!L || L.type !== 'image') return;
+    L.adj[k] = +e.target.value;
+    $(id + 'Val').textContent = e.target.value;
+    scheduleRender();
+  });
+  $(id).addEventListener('change', () => pushHistory());
+});
+
+// ================= Layers panel bindings =================
+ $('ltAddImage').onclick = () => $('layerInput').click();
+ $('ltDup').onclick = duplicateLayer;
+ $('ltDel').onclick = deleteLayer;
+ $('ltUp').onclick = () => moveLayer(+1);
+ $('ltDown').onclick = () => moveLayer(-1);
+ $('psBlendMode').addEventListener('change', e => {
+  const L = activeLayer();
+  if (L && L.type !== 'base'){ L.blend = e.target.value; renderLayerList(); scheduleRender(); pushHistory(); }
+});
+ $('psOpacity').addEventListener('input', e => {
+  const L = activeLayer();
+  if (L && L.type !== 'base'){ L.opacity = clamp(+e.target.value || 0, 0, 100); scheduleRender(); }
+});
+ $('psOpacity').addEventListener('change', pushHistory);
+
+// ================= Export =================
+document.querySelectorAll('#exportFormatSeg .seg-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#exportFormatSeg .seg-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    exportFmt = b.dataset.fmt;
+    const q = $('qualityRow');
+    q.style.opacity = exportFmt === 'jpeg' ? '1' : '.45';
+    q.style.pointerEvents = exportFmt === 'jpeg' ? 'auto' : 'none';
+    updateExportInfo();
+  });
+});
+ $('exportQuality').addEventListener('input', e => {
+  exportQuality = +e.target.value;
+  $('exportQualityVal').textContent = e.target.value;
+  updateExportInfo();
+});
+ $('exportScale').addEventListener('change', e => { exportScale = +e.target.value; updateExportInfo(); });
+
+function updateExportInfo(){
+  if (!baseAsset){ $('exportInfo').textContent = 'Load an image to export'; return; }
+  const W = Math.round(canvas.width * exportScale), H = Math.round(canvas.height * exportScale);
+  $('exportInfo').textContent = `Output: ${W} × ${H} px · ${exportFmt === 'png' ? 'PNG' : 'JPEG ' + exportQuality + '%'}`;
+}
+
+function dataURLtoBlob(durl){
+  const [head, b64] = durl.split(',');
+  const mime = head.match(/:(.*?);/)[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+function canvasToBlob(c, mime, q){
+  return new Promise(resolve => {
+    try { if (c.toBlob){ c.toBlob(b => resolve(b), mime, q); return; } } catch (e) {}
+    try { resolve(dataURLtoBlob(c.toDataURL(mime, q))); return; } catch (e) {}
+    resolve(null);
+  });
+}
+
+let exportFallbackUrl = null;
+function showExportFallback(blob, fname, sub){
+  if (exportFallbackUrl) URL.revokeObjectURL(exportFallbackUrl);
+  exportFallbackUrl = URL.createObjectURL(blob);
+  $('exportPreviewImg').src = exportFallbackUrl;
+  const dl = $('exportFallbackDl');
+  dl.href = exportFallbackUrl;
+  dl.download = fname;
+  $('exportModalSub').textContent = sub || 'Automatic download looks blocked here. Save the file manually below.';
+  $('exportModal').classList.add('show');
+}
+ $('exportModalClose').onclick = () => $('exportModal').classList.remove('show');
+ $('exportModal').addEventListener('click', e => {
+  if (e.target === $('exportModal')) $('exportModal').classList.remove('show');
+});
+
+async function saveBlob(blob, fname, mime, ext, sub){
+  if (window.showSaveFilePicker){
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fname,
+        types: [{ description: ext.toUpperCase() + ' file', accept: { [mime]: ['.' + ext] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      return 'saved';
+    } catch (e) {
+      if (e && e.name === 'AbortError') return 'cancel';
+    }
+  }
+  const inIframe = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  if (inIframe){ showExportFallback(blob, fname, sub); return 'fallback'; }
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+    return 'saved';
+  } catch (e) {
+    showExportFallback(blob, fname, sub);
+    return 'fallback';
+  }
+}
+
+async function doExport(){
+  if (!baseAsset){ toast('Load an image first', false); return; }
+  endCompare();
+  try { render(false); } catch (err) { console.error('Render before export failed:', err); }
+
+  const fmt = exportFmt;
+  const mime = fmt === 'png' ? 'image/png' : 'image/jpeg';
+  const ext  = fmt === 'png' ? 'png' : 'jpg';
+  const q = exportQuality / 100, s = exportScale;
+  const W = Math.round(canvas.width * s), H = Math.round(canvas.height * s);
+  const fname = ((baseAsset.name || 'vitimg').replace(/\.[^.]+$/, '') || 'vitimg') + '-edit.' + ext;
+
+  let source = canvas;
+  if (!(s === 1 && fmt === 'png')){
+    try {
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      if (fmt === 'jpeg'){ x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H); }
+      x.imageSmoothingEnabled = true;
+      x.imageSmoothingQuality = 'high';
+      x.drawImage(canvas, 0, 0, W, H);
+      source = c;
+    } catch (err) {
+      console.error('Scale pass failed:', err);
+      toast('Could not scale the image, exporting at 100%', false);
+      source = canvas;
+    }
+  }
+
+  const blob = await canvasToBlob(source, mime, q);
+  if (!blob){ toast('Export failed: the image could not be encoded', false); return; }
+
+  const result = await saveBlob(blob, fname, mime, ext, `Save ${W} × ${H} px manually below.`);
+  if (result === 'saved') toast(`Exported ${W} × ${H} px`);
+  else if (result === 'cancel') toast('Export cancelled');
+}
+ $('exportBtn').onclick = doExport;
+ $('quickExportBtn').onclick = doExport;
+
+// ================= Help modal =================
+const helpModal = $('helpModal');
+ $('helpBtn').addEventListener('click', () => helpModal.classList.add('show'));
+ $('helpClose').addEventListener('click', () => helpModal.classList.remove('show'));
+helpModal.addEventListener('click', e => {
+  if (e.target === helpModal) helpModal.classList.remove('show');
+});
+
+// ================= Sync =================
+function syncUI(){
+  syncAdjustUI();
+  $('angle').value = state.transform.angle; $('angleVal').textContent = state.transform.angle + '°';
+  $('cropZoom').value = state.transform.cropZoom; $('cropZoomVal').textContent = state.transform.cropZoom + '%';
+  $('cropAnchor').value = state.transform.anchor;
+  $('flipHBtn').classList.toggle('pressed', state.transform.flipH);
+  $('flipVBtn').classList.toggle('pressed', state.transform.flipV);
+  $('lutStrength').value = state.lutStrength; $('lutStrengthVal').textContent = state.lutStrength;
+  syncIsolateUI();
+  renderLutChip();
+  renderLayerList();
+  syncBlendBar();
+  syncLayerAdj();
+  updateExportInfo();
+  applyZoom();
+  updateCurveTexture();
+  renderCurveList();
+  drawCurveEditor();
+  updateCurveInfo();
+  const has = !!baseAsset;
+  ['autoEnhanceBtn','autoToneBtn','autoContrastBtn','autoColorBtn','autoResetBtn','resetCurvesBtn',
+   'cropStartBtn','isoPickBtn','isoOnBtn','isoRange','isoFeather','resetAllBtn']
+    .forEach(id => $(id).disabled = !has);
+}
+
+// ================= Shortcuts =================
+window.addEventListener('keydown', e => {
+  const t = e.target;
+  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  const mod = e.ctrlKey || e.metaKey;
+
+  if (e.code === 'Space' && !typing && !mod){
+    if (baseAsset){ e.preventDefault(); if (!spaceHeld){ spaceHeld = true; canvas.classList.add('pan'); } }
+    return;
+  }
+  if (typing) return;
+
+  if (mod && e.key.toLowerCase() === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (mod && e.key.toLowerCase() === 'y'){ e.preventDefault(); redo(); }
+  else if (mod && e.key.toLowerCase() === 'e'){ e.preventDefault(); doExport(); }
+  else if (e.key === '+' || e.key === '='){ setZoomFactor(currentFactor() * 1.25); }
+  else if (e.key === '-'){ setZoomFactor(currentFactor() / 1.25); }
+  else if (e.key === '0'){ fitZoom(); }
+  else if (e.key === '1'){ setZoomFactor(1); }
+  else if (e.key === 's' || e.key === 'S'){ toggleSplit(); }
+  else if (e.key === 'Escape'){
+    if (helpModal.classList.contains('show')) helpModal.classList.remove('show');
+    else if ($('exportModal').classList.contains('show')) $('exportModal').classList.remove('show');
+    else if (eyedropperOn) setEyedropper(false);
+    else if (cropMode) exitCrop(false);
+  }
+  else if (e.key === 'Delete' || e.key === 'Backspace'){
+    const L = CL();
+    if (L && selPt >= 0){
+      const pts = L.curves[curveChannel];
+      if (selPt === 0 || selPt === pts.length - 1){ toast('Endpoints can\u2019t be removed'); }
+      else {
+        pts.splice(selPt, 1);
+        selPt = -1;
+        updateCurveTexture(); drawCurveEditor(); updateCurveInfo(); scheduleRender(); pushHistory();
+        toast('Curve point deleted');
+      }
+      e.preventDefault();
+      return;
+    }
+    const AL = activeLayer();
+    if (AL && AL.type !== 'base'){ deleteLayer(); e.preventDefault(); }
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space'){ spaceHeld = false; canvas.classList.remove('pan'); }
+});
+
+ $('undoBtn').onclick = undo;
+ $('redoBtn').onclick = redo;
+ $('resetAllBtn').onclick = resetEverything;
+
+// ================= Init =================
+updateCurveTexture();
+updateSplitLine();
+syncUI();
+
+})();
+</script>
+</body>
+</html>
